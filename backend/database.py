@@ -99,7 +99,7 @@ def get_table_schema(db_file: str, table_name: str) -> dict:
     if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', table_name):
         return {}
 
-    db_path = DATABASES_DIR / db_file
+    db_path = get_practice_db_path(db_file)
     if not db_path.exists():
         return {}
 
