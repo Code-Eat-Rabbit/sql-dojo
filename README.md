@@ -133,18 +133,14 @@ sql-dojo/
 │       ├── problems.py          # GET /api/problems, /api/problems/{id}, /tables
 │       ├── progress.py          # POST/PATCH /api/progress/{id}, /summary
 │       └── databases.py         # GET /api/databases/{id}/connect
-├── frontend/
-│   └── src/
-│       ├── types.ts             # TypeScript interfaces
-│       ├── api.ts               # API client functions
-│       ├── App.tsx              # Router setup
-│       └── pages/
-│           ├── CategoryListPage.tsx
-│           └── ProblemListPage.tsx
-└── docs/
-    └── superpowers/
-        ├── specs/               # Design specification
-        └── plans/               # Implementation plan
+└── frontend/
+    └── src/
+        ├── types.ts             # TypeScript interfaces
+        ├── api.ts               # API client functions
+        ├── App.tsx              # Router setup
+        └── pages/
+            ├── CategoryListPage.tsx
+            └── ProblemListPage.tsx
 ```
 
 ## 🔧 Customization

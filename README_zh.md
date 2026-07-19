@@ -133,18 +133,14 @@ sql-dojo/
 │       ├── problems.py          # GET /api/problems, /:id, /:id/tables
 │       ├── progress.py          # POST/PATCH /api/progress/:id, /summary
 │       └── databases.py         # GET /api/databases/:id/connect
-├── frontend/
-│   └── src/
-│       ├── types.ts             # TypeScript 类型定义
-│       ├── api.ts               # API 封装
-│       ├── App.tsx              # 路由配置
-│       └── pages/
-│           ├── CategoryListPage.tsx
-│           └── ProblemListPage.tsx
-└── docs/
-    └── superpowers/
-        ├── specs/               # 设计规格文档
-        └── plans/               # 实现计划
+└── frontend/
+    └── src/
+        ├── types.ts             # TypeScript 类型定义
+        ├── api.ts               # API 封装
+        ├── App.tsx              # 路由配置
+        └── pages/
+            ├── CategoryListPage.tsx
+            └── ProblemListPage.tsx
 ```
 
 ## 🔧 自定义
