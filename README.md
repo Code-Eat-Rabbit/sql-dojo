@@ -62,25 +62,21 @@ SQL Dojo transforms a curated collection of **44 real SQL interview problems** (
 git clone https://github.com/Code-Eat-Rabbit/sql-dojo.git
 cd sql-dojo
 
-# Generate all practice databases
+# One-click start (generates data, installs deps, starts backend + frontend)
+bash start.sh
+```
+
+Or start components individually:
+
+```bash
+# Generate data first
 python3 data_builder/generate_data.py
-```
 
-This creates 14 SQLite databases under `databases/`, each containing the tables and data for one topic.
-
-### 2. Start Backend
-
-```bash
-pip install fastapi uvicorn
+# Terminal 1: backend
 python3 -m uvicorn backend.main:app --port 8000
-```
 
-### 3. Start Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
+# Terminal 2: frontend
+cd frontend && npm install && npm run dev
 ```
 
 Open `http://localhost:5173` in your browser.
