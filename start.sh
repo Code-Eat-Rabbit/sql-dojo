@@ -51,8 +51,17 @@ cd frontend && npm run dev &
 FRONTEND_PID=$!
 cd "$SCRIPT_DIR"
 
-# 等待启动
-sleep 3
+# 等待后端就绪
+echo "⏳ 等待后端就绪..."
+for i in $(seq 1 15); do
+    if curl -s http://localhost:8000/api/health > /dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+    if [ "$i" -eq 15 ]; then
+        echo "⚠️  后端启动超时，请检查日志"
+    fi
+done
 
 echo ""
 echo "========================================"
