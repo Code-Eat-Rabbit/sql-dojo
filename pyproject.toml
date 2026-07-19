@@ -1,0 +1,29 @@
+[project]
+name = "sql-dojo"
+version = "1.0.0"
+description = "A CodeTop-style SQL interview practice platform"
+requires-python = ">=3.11"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Yutao Ma", email = "mayutao0424@163.com" }
+]
+keywords = ["sql", "practice", "interview", "sqlite", "leetcode"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Education",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Education",
+]
+
+dependencies = [
+    "fastapi[standard]>=0.115.0",
+]
+
+[dependency-groups]
+dev = []
+
+[tool.uv.sources]
