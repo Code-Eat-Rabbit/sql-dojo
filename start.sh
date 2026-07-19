@@ -21,11 +21,12 @@ else
     echo "✅ 练习数据已就绪 (databases/)"
 fi
 
-# 2. 安装后端依赖（如果需要）
+# 2. 检查后端依赖
 if ! python3 -c "import fastapi" 2>/dev/null; then
     echo ""
-    echo "📦 安装后端依赖..."
-    pip3 install fastapi uvicorn
+    echo "❌ 缺少 fastapi，请手动安装："
+    echo "   python3 -m pip install fastapi uvicorn"
+    exit 1
 fi
 
 # 3. 安装前端依赖（如果需要）
