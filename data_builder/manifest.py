@@ -63,7 +63,7 @@ class Category:
 CATEGORIES: List[Category] = [
     Category(
         id="01",
-        name="连续登陆",
+        name="连续登陆 / Continuous Login",
         db_file="01_continuous_login.db",
         order=1,
         problems=[
@@ -78,6 +78,8 @@ CATEGORIES: List[Category] = [
 请查询连续登录 3 天以上的所有用户。
 
 **补充知识点：** 字段名相同不会覆盖，例如 `select a,a,a` 结果有三列。
+
+English: Given a user login table `test` with fields `id` (user ID) and `date` (login date), find all users who logged in for 3 or more consecutive days.
 """,
                 reference_sql="""
 -- 步骤一：去重
@@ -111,6 +113,8 @@ HAVING COUNT(*) > 3;
                 tags=["字节面试题", "row_number", "连续", "max"],
                 description="""
 承接上一题，查询每个用户连续登录的最大天数。
+
+English: Following the previous problem, find the maximum consecutive login days for each user.
 """,
                 reference_sql="""
 -- 承接上一问第二步
@@ -138,6 +142,11 @@ GROUP BY id;
 1. row_number() 法
 2. lag/lead 法  
 3. 自关联法
+
+English: Solve "users who logged in 3+ consecutive days" using three different methods:
+1. row_number() method
+2. lag/lead method
+3. Self-join method
 """,
                 reference_sql="""
 -- 方法1: row_number()
@@ -175,6 +184,8 @@ JOIN (SELECT id, substr(date,1,10) AS date FROM test GROUP BY id, substr(date,1,
                 tags=["连续", "总结"],
                 description="""
 总结连续类 SQL 题的核心思路。
+
+English: Summary: The core approach for consecutive-type SQL problems. Use `row_number() over()` to create a grouping key, then group and count.
 """,
                 reference_sql="""
 -- 核心思路：row_number() over() 减一下，再分组 count
@@ -195,6 +206,8 @@ JOIN (SELECT id, substr(date,1,10) AS date FROM test GROUP BY id, substr(date,1,
                 tags=["连续", "外汇", "条件筛选"],
                 description="""
 某外汇公司面试题：给定用户账户表，查询账户余额大于 1000 的连续天数。
+
+English: Given a forex company's account table, find consecutive days where the account balance exceeds 1000. Filter first, then apply the consecutive-days pattern.
 """,
                 reference_sql="""
 -- 先筛选余额 > 1000 的行，再套用连续类题的思路
@@ -224,6 +237,8 @@ HAVING COUNT(*) > 1;
                 tags=["连续", "集度", "日期区间合并"],
                 description="""
 给定一组日期区间（start_date, end_date），合并连续或重叠的区间。
+
+English: Given a set of date intervals (start_date, end_date), merge consecutive or overlapping intervals. Use lag to detect gaps, then sum flags to create group IDs.
 """,
                 reference_sql="""
 WITH t1 AS (
@@ -262,6 +277,8 @@ ORDER BY MIN(start_date), id, NAME;
                 tags=["连续", "胜负"],
                 description="""
 计算每个用户的连胜数（最长连续胜场）。
+
+English: Calculate each user's longest winning streak. Isolate "win" rows, then use the row_number difference trick to group consecutive wins.
 """,
                 reference_sql="""
 -- 解法1：先把胜负转 0/1，再套连续类题思路
@@ -304,7 +321,7 @@ GROUP BY user_id, streak_id;
     ),
     Category(
         id="02",
-        name="开窗函数 lead/lag",
+        name="开窗函数 lead/lag / Window Functions lead/lag",
         db_file="02_window_lead_lag.db",
         order=2,
         problems=[
@@ -317,6 +334,8 @@ GROUP BY user_id, streak_id;
                 description="""
 给定股票/商品价格时间序列表，标记每个时间点是「波峰」还是「波谷」。
 波峰：价格大于前一天和后一天；波谷反之。
+
+English: Given a stock/commodity price time series, mark each time point as "peak" (price > previous and next) or "trough" (price < previous and next). Use LAG and LEAD window functions.
 """,
                 reference_sql="""
 SELECT id, ds, price,
@@ -344,6 +363,8 @@ FROM (
                 tags=["lag", "列转换"],
                 description="""
 把前一行和后一行的数据放到当前行，作为新列展示。
+
+English: Move the previous row's value and the next row's value into the current row as new columns using LAG and LEAD.
 """,
                 reference_sql="""
 SELECT id, date, value,
@@ -365,6 +386,8 @@ FROM data_table;
                 tags=["lag", "面试"],
                 description="""
 真实面试题（lag/lead 综合应用）。
+
+English: A real interview question covering comprehensive LAG/LEAD usage, e.g., calculating period-over-period change rates.
 """,
                 reference_sql="""
 -- 面试题典型场景：计算变化率
@@ -382,7 +405,7 @@ FROM metrics;
     ),
     Category(
         id="03",
-        name="三种排序开窗",
+        name="三种排序开窗 / Three Ranking Window Functions",
         db_file="03_window_rank.db",
         order=3,
         problems=[
@@ -397,6 +420,11 @@ FROM metrics;
 - `row_number()`: 连续编号 1,2,3,4...（不并列）
 - `rank()`: 跳号 1,2,2,4...（并列同号，下一个跳号）
 - `dense_rank()`: 不跳号 1,2,2,3...（并列同号，下一个不跳）
+
+English: Master the three ranking window functions:
+- `row_number()`: sequential 1,2,3,4... (no ties)
+- `rank()`: gapped 1,2,2,4... (ties share rank, next skips)
+- `dense_rank()`: gapless 1,2,2,3... (ties share rank, next does not skip)
 """,
                 reference_sql="""
 SELECT student, score,
@@ -420,6 +448,8 @@ FROM scores;
                 tags=["dense_rank", "topN", "面试"],
                 description="""
 给定学生成绩表（student, subject, score），查询每个学生成绩第二高的科目。
+
+English: Given a student scores table (student, subject, score), find each student's second-highest scoring subject. Use DENSE_RANK with PARTITION BY.
 """,
                 reference_sql="""
 SELECT student, subject
@@ -441,7 +471,7 @@ WHERE dr = 2;
     ),
     Category(
         id="04",
-        name="累计汇总",
+        name="累计汇总 / Cumulative Aggregation",
         db_file="04_cumulative_agg.db",
         order=4,
         problems=[
@@ -453,6 +483,8 @@ WHERE dr = 2;
                 tags=["sum", "累计", "聚合开窗"],
                 description="""
 用聚合开窗函数 `sum() over()` 统计每个用户按月累计访问次数。
+
+English: Use `sum() over()` to calculate each user's cumulative visit count by month.
 """,
                 reference_sql="""
 SELECT user_id, month_id, visit_cnt_1m,
@@ -474,6 +506,8 @@ FROM user_visits;
                 description="""
 给定用户进入和离开直播间的时间，计算同时在线人数峰值。
 核心技巧：进入 +1，离开 -1，按时间排序累加。
+
+English: Peak concurrent online users: given user enter/leave timestamps, treat enter as +1 and leave as -1, then compute cumulative sum by time to find the maximum.
 """,
                 reference_sql="""
 -- 步骤一：进入+1，离开-1
@@ -507,6 +541,8 @@ GROUP BY room_id;
                 tags=["同时在线", "小时"],
                 description="""
 限定时段内，按每小时统计同时在线人数的最大值。
+
+English: Within a specified time range, calculate the maximum concurrent online users per hour.
 """,
                 reference_sql="""
 -- 在步骤二的 event_time 上加 substr 取小时粒度即可
@@ -532,6 +568,8 @@ GROUP BY room_id, substr(event_time, 1, 13);
                 tags=["同时在线", "全时段"],
                 description="""
 不限制日期，统计有史以来每小时最大同时在线人数。
+
+English: Remove the date filter to calculate all-time hourly maximum concurrent users.
 """,
                 reference_sql="""
 -- 去掉 WHERE 日期筛选即可
@@ -553,6 +591,8 @@ GROUP BY room_id, substr(event_time, 1, 13);
                 tags=["同时在线", "峰值时间"],
                 description="""
 统计 2022-05-01 当天每个直播间最大在线观看人数，以及达到该峰值的时间。
+
+English: For a specific date, find the maximum concurrent viewer count per live room and the exact time when that peak occurred. Use cumulative sum + rank.
 """,
                 reference_sql="""
 WITH events AS (
@@ -588,6 +628,8 @@ WHERE rk = 1;
                 tags=["累计", "hard", "美团"],
                 description="""
 给定每个用户每天的消费金额，求每个用户累计消费首次达到 1000 元的日期。
+
+English: Given daily spending per user, find the earliest date when each user's cumulative spending first reaches 1000. Use cumulative sum, filter, then MIN.
 """,
                 reference_sql="""
 WITH cumulative AS (
@@ -613,6 +655,8 @@ GROUP BY user_id;
                 tags=["复购", "累计"],
                 description="""
 计算每个用户复购（购买了 ≥ 2 次）的商品列表。
+
+English: Find products that each user has purchased 2 or more times (repurchase analysis). Use GROUP BY + HAVING COUNT >= 2.
 """,
                 reference_sql="""
 SELECT user_id, product_id
@@ -631,6 +675,8 @@ HAVING COUNT(DISTINCT order_id) >= 2;
                 tags=["新低", "累计", "min"],
                 description="""
 找出当天价格是历史新低的商品 ID。
+
+English: Find products whose price today is an all-time low. Use `min() over()` for a rolling minimum, then compare current price with historical minimum.
 """,
                 reference_sql="""
 WITH min_so_far AS (
@@ -652,7 +698,7 @@ WHERE price = min_price_so_far
     ),
     Category(
         id="05",
-        name="炸裂函数",
+        name="炸裂函数 / Explode Functions",
         db_file="05_explode.db",
         order=5,
         problems=[
@@ -664,6 +710,8 @@ WHERE price = min_price_so_far
                 tags=["explode", "区间", "合并"],
                 description="""
 给定多个区间（start, end），合并所有有交集的区间。
+
+English: Given multiple intervals (start, end), merge all overlapping intervals. Use MAX(end) over() as a rolling maximum and detect non-overlapping groups.
 """,
                 reference_sql="""
 WITH intervals AS (
@@ -691,7 +739,7 @@ GROUP BY group_id;
     ),
     Category(
         id="06",
-        name="关联应用",
+        name="关联应用 / Join Applications",
         db_file="06_joins.db",
         order=6,
         problems=[
@@ -703,6 +751,8 @@ GROUP BY group_id;
                 tags=["子查询", "join", "关联"],
                 description="""
 查询「所有科目都大于 60 分」的学生的全部成绩记录。
+
+English: Find all score records for students who scored above 60 in every subject. Use NOT IN to exclude students with any failing score, then JOIN to get full records.
 """,
                 reference_sql="""
 SELECT t0.student_name, t2.class_name, t1.score
@@ -727,6 +777,8 @@ WHERE t0.id NOT IN (
                 tags=["自关联", "join", "相互关注"],
                 description="""
 在关注关系表 `fans(from_user, to_user)` 中，找出相互关注的用户对。
+
+English: In a follow-relationship table (from_user, to_user), find mutual follow pairs. Two approaches: self-join or UNION + GROUP BY HAVING COUNT >= 2.
 """,
                 reference_sql="""
 -- 方法1：JOIN
@@ -758,6 +810,8 @@ HAVING COUNT(*) >= 2;
                 tags=["优化", "千亿", "大数据"],
                 description="""
 当数据量达到千亿级别时，相互关注查询如何优化？
+
+English: How to optimize mutual-follow queries at billion-row scale? Discussion of map-side joins, bucketing, and Bloom filters to avoid full shuffle joins.
 """,
                 reference_sql="""
 -- 思路：不再用 JOIN，而是用 map 端 join（小表放内存）
@@ -774,7 +828,7 @@ HAVING COUNT(*) >= 2;
     ),
     Category(
         id="07",
-        name="留存计算",
+        name="留存计算 / Retention Calculation",
         db_file="07_retention.db",
         order=7,
         problems=[
@@ -786,6 +840,8 @@ HAVING COUNT(*) >= 2;
                 tags=["留存", "retention", "left join"],
                 description="""
 给定用户每日活跃表，计算七日留存率（Day0 活跃的用户在 Day7 仍然活跃的比例）。
+
+English: Given daily user activity, calculate the 7-day retention rate: the proportion of Day 0 users who are still active on Day 7. Use MIN date + LEFT JOIN to Day 7 records.
 """,
                 reference_sql="""
 SELECT a.first_date,
@@ -812,7 +868,7 @@ GROUP BY a.first_date;
     ),
     Category(
         id="08",
-        name="数据展开与收缩",
+        name="数据展开与收缩 / Data Expansion & Contraction",
         db_file="08_expand_contract.db",
         order=8,
         problems=[
@@ -824,6 +880,8 @@ GROUP BY a.first_date;
                 tags=["展开", "行转列"],
                 description="""
 给定一个用户和其标签列表（逗号分隔），把标签展开为多行。
+
+English: Given users with comma-separated tags, expand each tag into its own row (string-to-rows). Use recursive CTE in SQLite to simulate explode.
 """,
                 reference_sql="""
 -- SQLite 中可以使用 recursive CTE 模拟 explode
@@ -853,6 +911,8 @@ SELECT user_id, tag FROM split WHERE tag != '';
                 tags=["收缩", "列转行", "group_concat"],
                 description="""
 把多行数据按用户合并为一行（聚合标签）。
+
+English: Aggregate multiple rows per user back into a single row with concatenated tags (rows-to-string). Use GROUP_CONCAT in SQLite.
 """,
                 reference_sql="""
 SELECT user_id,
@@ -867,7 +927,7 @@ GROUP BY user_id;
     ),
     Category(
         id="09",
-        name="合并区间",
+        name="合并区间 / Merge Intervals",
         db_file="09_merge_interval.db",
         order=9,
         problems=[
@@ -879,6 +939,8 @@ GROUP BY user_id;
                 tags=["状态", "标记"],
                 description="""
 给定状态变更日志，标记每个时间段的状态。
+
+English: Given a status change log, mark each time period with its corresponding status. Use LEAD to get the next timestamp as the current status end time.
 """,
                 reference_sql="""
 SELECT id, status, start_time,
@@ -896,6 +958,8 @@ FROM status_log;
                 tags=["缺失值", "lag", "填充"],
                 description="""
 用上一个非空值填充缺失值（forward fill）。
+
+English: Forward-fill missing (NULL) values with the most recent non-null value. Use a correlated subquery or recursive CTE.
 """,
                 reference_sql="""
 -- 用子查询 + lag 技术填充
@@ -917,7 +981,7 @@ SELECT * FROM filled;
     ),
     Category(
         id="10",
-        name="人事数仓表格设计",
+        name="人事数仓表格设计 / HR Data Warehouse Design",
         db_file="10_hr_warehouse.db",
         order=10,
         problems=[
@@ -929,6 +993,8 @@ SELECT * FROM filled;
                 tags=["递归", "开窗", "误导"],
                 description="""
 一些看似需要递归但实际可以用开窗函数解决的题目。典型场景：计算连续值、层级汇总等。
+
+English: Problems that appear to require recursive CTEs but can actually be solved more elegantly with window functions. Typical scenarios: consecutive values, hierarchical summaries.
 """,
                 reference_sql="""
 -- 示例：计算树形结构中的节点深度（以为要递归，实则可用路径排序）
@@ -945,6 +1011,8 @@ SELECT * FROM filled;
                 tags=["数仓", "表格设计", "人事"],
                 description="""
 设计人事数仓核心表结构：员工表、部门表、薪资表、考勤表。
+
+English: Design core HR data warehouse tables: employee dimension, department, salary fact, attendance fact. Follow star/snowflake schema best practices.
 """,
                 reference_sql="""
 -- 员工表
@@ -980,7 +1048,7 @@ CREATE TABLE attendance (
     ),
     Category(
         id="11",
-        name="日期处理",
+        name="日期处理 / Date Processing",
         db_file="11_date_processing.db",
         order=11,
         problems=[
@@ -992,6 +1060,8 @@ CREATE TABLE attendance (
                 tags=["日期", "year", "格式化"],
                 description="""
 将日期转换为 yyyy 格式。
+
+English: Convert date strings to yyyy format using SUBSTR.
 """,
                 reference_sql="""
 SELECT date, SUBSTR(date, 1, 4) AS year
@@ -1008,6 +1078,8 @@ FROM date_table;
                 tags=["日期", "季度"],
                 description="""
 将日期转换为 yyyyQn 格式（季度）。
+
+English: Convert date strings to yyyyQn (quarter) format. Formula: (month-1)//3 + 1.
 """,
                 reference_sql="""
 SELECT date,
@@ -1025,6 +1097,8 @@ FROM date_table;
                 tags=["日期", "汇总"],
                 description="""
 汇总所有日期格式转换的代码：year, mm, quarter, half, h2t1, ytm, last*系列。
+
+English: Summary of all date format conversions: year, month, quarter, half-year, YYYYMM, last12m, last30d/60d/90d/180d.
 """,
                 reference_sql="""
 -- year:  SUBSTR(date, 1, 4)
@@ -1042,7 +1116,7 @@ FROM date_table;
     ),
     Category(
         id="12",
-        name="大厂原题",
+        name="大厂原题 / Big Tech Interview Questions",
         db_file="12_company_questions.db",
         order=12,
         problems=[
@@ -1105,7 +1179,7 @@ FROM date_table;
     ),
     Category(
         id="13",
-        name="JSON 解析",
+        name="JSON 解析 / JSON Parsing",
         db_file="13_json_parsing.db",
         order=13,
         problems=[
@@ -1117,6 +1191,8 @@ FROM date_table;
                 tags=["json", "解析"],
                 description="""
 SQLite 中解析 JSON 字段的方法（使用 json_extract 等内置函数）。
+
+English: Parse JSON fields in SQLite using built-in functions: json_extract() to access keys, json_each() to expand arrays.
 """,
                 reference_sql="""
 -- SQLite 内置 JSON 函数
@@ -1140,7 +1216,7 @@ FROM json_table, JSON_EACH(json_table.data, '$.items');
     ),
     Category(
         id="14",
-        name="趣味 SQL",
+        name="趣味 SQL / Fun SQL",
         db_file="14_fun_sql.db",
         order=14,
         problems=[
@@ -1152,6 +1228,8 @@ FROM json_table, JSON_EACH(json_table.data, '$.items');
                 tags=["趣味", "算法", "接雨水"],
                 description="""
 如何用 SQL 求解经典算法题「接雨水」？（给定柱子高度数组，计算能接多少雨水）
+
+English: Solve the classic "Trapping Rain Water" algorithm problem in SQL. For each position, water = min(left_max, right_max) - height. Use MAX() over() for rolling maxima.
 """,
                 reference_sql="""
 WITH numbered AS (
@@ -1197,6 +1275,8 @@ WHERE MIN(lmax, rmax) > height;
                 tags=["趣味", "赛马", "非等值关联"],
                 description="""
 如何用 SQL 解决趣味赛马问题（非等值关联匹配）？
+
+English: Solve the horse racing problem using non-equi joins: for each horse, find the next faster horse using a correlated subquery.
 """,
                 reference_sql="""
 -- 非等值关联：找每匹马比自己快的前一匹
