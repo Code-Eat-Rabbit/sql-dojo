@@ -1,31 +1,47 @@
 #!/bin/bash
 # SQL Dojo — 一键启动后端 + 前端
 # Usage: bash start.sh
+# Requires: Python 3.12+ (will auto-detect python3.12 or python3)
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# 找到可用的 Python 3.12+
+PYTHON=""
+for cmd in python3.12 python3.11 python3; do
+    if command -v "$cmd" &>/dev/null && "$cmd" -c "import sys; exit(0 if sys.version_info >= (3,11) else 1)" 2>/dev/null; then
+        PYTHON="$cmd"
+        break
+    fi
+done
+
+if [ -z "$PYTHON" ]; then
+    echo "❌ 未找到 Python 3.11+，请安装后再试"
+    exit 1
+fi
+
 echo "========================================"
 echo "  🥋 SQL Dojo"
+echo "  Python: $($PYTHON --version)"
 echo "========================================"
 
 # 1. 生成数据（如果还没生成）
 if [ ! -f databases/progress.db ]; then
     echo ""
     echo "📦 首次运行，正在生成练习数据..."
-    python3 data_builder/generate_data.py
+    $PYTHON data_builder/generate_data.py
 else
     echo ""
     echo "✅ 练习数据已就绪 (databases/)"
 fi
 
 # 2. 检查后端依赖
-if ! python3 -c "import fastapi" 2>/dev/null; then
+if ! $PYTHON -c "import fastapi" 2>/dev/null; then
     echo ""
     echo "❌ 缺少 fastapi，请手动安装："
-    echo "   python3 -m pip install fastapi uvicorn"
+    echo "   $PYTHON -m pip install fastapi uvicorn"
     exit 1
 fi
 
@@ -39,7 +55,7 @@ fi
 # 4. 启动后端
 echo ""
 echo "🚀 启动后端 (http://localhost:8000)..."
-python3 -m uvicorn backend.main:app --port 8000 &
+$PYTHON -m uvicorn backend.main:app --port 8000 &
 BACKEND_PID=$!
 
 # 5. 启动前端
