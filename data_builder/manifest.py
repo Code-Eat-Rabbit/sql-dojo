@@ -10,6 +10,19 @@ from typing import List, Optional
 
 @dataclass
 class Problem:
+    """一道 SQL 练习题。
+
+    Attributes:
+        id: 题目唯一标识，格式 "category_id_index"，如 "01_01"。
+        category_id: 所属专题 ID，如 "01"。
+        title: 题目标题。
+        difficulty: 难度等级 1-5。
+        tags: 标签列表，如 ["字节面试题", "row_number"]。
+        description: 题目描述（Markdown 格式）。
+        reference_sql: 参考答案（SQL 语句）。
+        tables: 该题涉及的表名列表。
+        hints: 解题提示列表。
+    """
     id: str                # "01_01"
     category_id: str       # "01"
     title: str
@@ -23,6 +36,15 @@ class Problem:
 
 @dataclass
 class Category:
+    """一个 SQL 练习专题，包含一组相关题目。
+
+    Attributes:
+        id: 专题唯一标识，如 "01"。
+        name: 专题名称，如 "连续登陆"。
+        db_file: 对应的 SQLite 数据库文件名。
+        order: 排序序号。
+        problems: 该专题包含的题目列表。
+    """
     id: str
     name: str
     db_file: str           # "01_continuous_login.db"
@@ -33,6 +55,10 @@ class Category:
 # ============================================================
 # 专题定义
 # ============================================================
+#
+# CATEGORIES: 所有 SQL 练习专题的定义列表。
+#   每个 Category 包含该专题的元数据及全部 Problem。
+#   data_builder 遍历此列表生成数据库，backend 遍历此列表提供 API。
 
 CATEGORIES: List[Category] = [
     Category(
@@ -1025,55 +1051,55 @@ FROM date_table;
                 category_id="12",
                 title="字节 — 题1",
                 difficulty=3,
-                tags=["字节", "大厂"],
+                tags=["字节", "大厂", "stub"],
                 description="字节跳动面试原题。",
-                reference_sql="",
+                reference_sql="-- 待补充",
                 tables=[],
-                hints=[],
+                hints=["题目内容待从原始文档补充"],
             ),
             Problem(
                 id="12_02",
                 category_id="12",
                 title="字节 — 题2",
                 difficulty=3,
-                tags=["字节", "大厂"],
+                tags=["字节", "大厂", "stub"],
                 description="字节跳动面试原题。",
-                reference_sql="",
+                reference_sql="-- 待补充",
                 tables=[],
-                hints=[],
+                hints=["题目内容待从原始文档补充"],
             ),
             Problem(
                 id="12_03",
                 category_id="12",
                 title="得物实际场景需求",
                 difficulty=4,
-                tags=["得物", "大厂", "场景"],
+                tags=["得物", "大厂", "场景", "stub"],
                 description="得物真实业务场景 SQL 需求。",
-                reference_sql="",
+                reference_sql="-- 待补充",
                 tables=[],
-                hints=[],
+                hints=["题目内容待从原始文档补充"],
             ),
             Problem(
                 id="12_04",
                 category_id="12",
                 title="阿里面试题",
                 difficulty=4,
-                tags=["阿里", "大厂"],
+                tags=["阿里", "大厂", "stub"],
                 description="阿里巴巴面试原题。",
-                reference_sql="",
+                reference_sql="-- 待补充",
                 tables=[],
-                hints=[],
+                hints=["题目内容待从原始文档补充"],
             ),
             Problem(
                 id="12_05",
                 category_id="12",
                 title="拼多多面试题",
                 difficulty=3,
-                tags=["拼多多", "大厂"],
+                tags=["拼多多", "大厂", "stub"],
                 description="拼多多面试原题。",
-                reference_sql="",
+                reference_sql="-- 待补充",
                 tables=[],
-                hints=[],
+                hints=["题目内容待从原始文档补充"],
             ),
         ],
     ),
@@ -1157,11 +1183,11 @@ WHERE MIN(lmax, rmax) > height;
                 category_id="14",
                 title="墨天轮 SQL 挑战赛第二期",
                 difficulty=4,
-                tags=["挑战赛", "趣味"],
+                tags=["挑战赛", "趣味", "stub"],
                 description="墨天轮 SQL 挑战赛题目。",
-                reference_sql="",
+                reference_sql="-- 待补充",
                 tables=[],
-                hints=[],
+                hints=["题目内容待从原始文档补充"],
             ),
             Problem(
                 id="14_03",
@@ -1188,11 +1214,11 @@ WHERE b.time = (SELECT MIN(time) FROM race_result WHERE time < a.time);
                 category_id="14",
                 title="块熵计算",
                 difficulty=5,
-                tags=["熵", "趣味", "信息论"],
+                tags=["熵", "趣味", "信息论", "stub"],
                 description="如何用 SQL 计算块熵（Block Entropy）？",
-                reference_sql="",
+                reference_sql="-- 待补充",
                 tables=[],
-                hints=[],
+                hints=["题目内容待从原始文档补充"],
             ),
         ],
     ),
