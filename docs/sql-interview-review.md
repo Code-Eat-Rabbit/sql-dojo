@@ -1322,7 +1322,7 @@ GROUP BY user_id;
 
 **4. 知识点延伸**：
 
-- **`collect_list` vs `collect_set`**：`collect_list` 保留重复值和插入顺序；`collect_set` 去重但不保序（底层是 HashSet）。需要去重且保序时，用 `sort_array(collect_set(tag))`（先去重再排序）。
+- **`collect_list` vs `collect_set`**：`collect_list` 保留重复值；实践中通常保留输入顺序，但非语义保证；`collect_set` 去重但不保序（底层是 HashSet）。需要去重且保序时，用 `sort_array(collect_set(tag))`（先去重再排序）。
 - **聚合内排序 `sort_array`**：`sort_array(collect_list(tag))` 对收集到的数组做字典序排序，可用于保证输出稳定。注意 `sort_array` 是升序，如需降序需加 `reverse()`。
 - **`CONCAT_WS` vs `CONCAT`**：`CONCAT_WS` 遇 NULL 跳过该元素，其余正常拼接；`CONCAT` 只要有一个参数为 NULL，整个结果就变 NULL。聚合场景优先用 `CONCAT_WS`。
 
@@ -1396,7 +1396,7 @@ FROM date_table;
 
 **5. 面试追问**：
 
-- **Q: 为什么不用内置的 `quarter()` 函数？** A: 各引擎对日期函数的支持差异很大——MySQL/PostgreSQL 有 `QUARTER()`，Hive 有 `QUARTER()`（需要 date 类型），SQLite 完全没有。手写公式 `(m-1)/3 + 1` 是纯算术，不依赖任何引擎特性，最保险。而且面试中考的就是你能否现场推导这个公式。
+- **Q: 为什么不用内置的 `quarter()` 函数？** A: 各引擎对日期函数的支持差异很大——MySQL/PostgreSQL 有 `QUARTER()`，Hive 有 `QUARTER()`（需要 date 类型），SQLite 完全没有。手写公式 `(m-1) div 3 + 1` 是纯算术，不依赖任何引擎特性，最保险（口头推导时可用数学整除写法 `(m-1)/3 + 1`，但落到 Hive 代码需用 `div`）。而且面试中考的就是你能否现场推导这个公式。
 - **Q: 滚动 12 个月的边界怎么定？** A: 用日期差（`date_sub(current_date, 365)`）而非月份差。用 365 天而非 12 个月是因为后者在不同引擎中语义不同（有的含当月，有的不含）。口径要和业务方确认：是否包含端点、是否用自然月还是滚动天。另外闰年时 365 天会有微小偏差，大数据场景通常可忽略。
 
 </details>
