@@ -95,4 +95,295 @@
 6. **Hive 与标准 SQL 差异**：`date_add(d, n)` 不是 `INTERVAL` 语法；多参取小用 `least()`（SQLite 是 `min()`）；`collect_list/collect_set` vs `group_concat`；`get_json_object` vs `json_extract`。
 7. **什么时候用递归 CTE，什么时候用开窗**：先看能否用 `row_number/lag + 聚合开窗` 的"分段子问题"套路解决（连续、分段、层级汇总大多可以）；真需要逐行传递状态（如逐行 forward fill、树遍历）才用递归——面试先答开窗解法是加分项（源自题 10_01 的辨析）。
 
+# Part 2 精选题册
+
+## 组1 连续问题
+
+---
+
+### Q1. 查询连续登陆3天以上的用户 `★★☆☆☆` `字节面试题`
+
+> 来源：项目题号 `01_01`　表：`test`
+
+**表结构：**
+
+| id (INTEGER) | date (TEXT) |
+|---|---|
+| 1 | 2024-01-01 08:00:00 |
+| 1 | 2024-01-01 20:00:00 |
+| 1 | 2024-01-02 09:00:00 |
+
+给定一张用户登录表 `test`，包含字段 `id`（用户ID）和 `date`（登录日期）。
+请查询连续登录 3 天以上的所有用户。
+
+*提示：row_number() over() 减一下，再分组 count；先去重，再用 date_add + row_number 创建分组标识，最后按分组标识 count 筛选。*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：经典的「差值法」套路——同一日期去重后，连续日期与 row_number 同为等差数列，两者相减差值恒定，该差值即分组键。
+
+**2. 参考 SQL（Hive 方言）**：
+
+```sql
+-- 步骤三：统计连续天数，筛选 > 3
+SELECT id, date1, COUNT(*) AS day_cnt
+FROM (
+    -- 步骤二：用 row_number 标记，date_add 减去 row_number 得分组键
+    SELECT id, date,
+           date_add(date, -ROW_NUMBER() OVER (PARTITION BY id ORDER BY date)) AS date1
+    FROM (
+        -- 步骤一：按用户+日期去重（一天可能多次登录）
+        SELECT id, substr(date, 1, 10) AS date
+        FROM test
+        GROUP BY id, substr(date, 1, 10)
+    ) t1
+) t2
+GROUP BY id, date1
+HAVING COUNT(*) > 3;
+```
+
+**3. 关键解析**：
+
+- `substr(date, 1, 10)` 将 datetime 截为日期（`'2024-01-01 08:00:00'` → `'2024-01-01'`）。Hive 可直接用 `to_date(date)` 替代。
+- `date_add(date, -ROW_NUMBER() ...)` 是核心：日期每天 +1，row_number 也 +1，作差后常数项抵消，连续段内差值恒定。
+
+**4. 知识点延伸**：
+
+**变式 1：求每个用户连续登录的最大天数（01_02）**
+
+```sql
+SELECT id, MAX(day_cnt) AS max_day_cnt
+FROM (
+    SELECT id, date1, COUNT(*) AS day_cnt
+    FROM (
+        SELECT id, date,
+               date_add(date, -ROW_NUMBER() OVER (PARTITION BY id ORDER BY date)) AS date1
+        FROM (
+            SELECT id, substr(date, 1, 10) AS date
+            FROM test
+            GROUP BY id, substr(date, 1, 10)
+        ) t1
+    ) t2
+    GROUP BY id, date1
+) t3
+GROUP BY id;
+```
+
+**变式 2：账户余额 > 1000 的连续天数（01_05 外汇公司）**
+
+```sql
+WITH filtered AS (
+    -- 先筛选余额 > 1000 的行，再套差值法
+    SELECT user_id, date, balance
+    FROM account
+    WHERE balance > 1000
+)
+SELECT user_id,
+       date_sub(date, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY date)) AS grp,
+       COUNT(*) AS consecutive_days
+FROM filtered
+GROUP BY user_id, grp
+HAVING COUNT(*) > 1;
+```
+
+> 「先过滤后连续」顺序不能反——如果先做连续再过滤，会把余额 <= 1000 的间隔日也纳入连续段。
+
+**相关函数**：`date_sub(d, n)` 与 `date_add(d, -n)` 等价（负天数）。`GROUP BY id, date` 本身即去重——同一用户同一天只留一行。
+
+**5. 面试追问**：
+
+- **Q: 为什么必须先去重？** A: 一天多次登录会让 row_number 错位（同一天占多个序号），差值法失效。
+- **Q: "连续 3 天以上"含不含恰好 3 天？** A: 口径要当场确认，`HAVING COUNT(*) >= 3` 与 `> 3` 一字之差。
+- **Q: 为什么减 row_number 后差值会相同？** A: 日期与序号同步 +1 递增，作差后常数项抵消——本质是等差数列性质。
+
+</details>
+
+---
+
+### Q2. 连续登录3天以上用户 — 三种方法汇总 `★★★☆☆` `方法汇总`
+
+> 来源：项目题号 `01_03`　表：`test`
+
+**表结构**：同 Q1，`test(id INTEGER, date TEXT)`
+
+用三种不同方法实现「查询连续登录 3 天以上的用户」：
+1. row_number() 法
+2. lag/lead 法
+3. 自关联法
+
+*提示：三种方法核心都是找到连续日期，row_number 法最通用，建议重点掌握。*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：同一问题用三种 SQL 技术路径解决，对比理解各自优劣。
+
+**2. 参考 SQL（Hive 方言）**：
+
+**方法 1：row_number() 差值法**（详见 Q1，此处不重复）
+
+**方法 2：lag() 法**
+
+```sql
+SELECT DISTINCT id
+FROM (
+    SELECT id, date,
+           LAG(date, 1) OVER (PARTITION BY id ORDER BY date) AS prev1,
+           LAG(date, 2) OVER (PARTITION BY id ORDER BY date) AS prev2
+    FROM (
+        SELECT id, substr(date, 1, 10) AS date
+        FROM test
+        GROUP BY id, substr(date, 1, 10)
+    ) deduped
+) t
+WHERE DATEDIFF(date, prev1) = 1 AND DATEDIFF(prev1, prev2) = 1;
+```
+
+**方法 3：自关联法**
+
+```sql
+SELECT DISTINCT a.id
+FROM (
+    SELECT id, substr(date, 1, 10) AS date
+    FROM test
+    GROUP BY id, substr(date, 1, 10)
+) a
+JOIN (
+    SELECT id, substr(date, 1, 10) AS date
+    FROM test
+    GROUP BY id, substr(date, 1, 10)
+) b ON a.id = b.id AND DATEDIFF(a.date, b.date) = 1
+JOIN (
+    SELECT id, substr(date, 1, 10) AS date
+    FROM test
+    GROUP BY id, substr(date, 1, 10)
+) c ON b.id = c.id AND DATEDIFF(b.date, c.date) = 1;
+```
+
+**3. 关键解析**：
+
+- 方法 2 用 `LAG(date, 1)` 和 `LAG(date, 2)` 取前两天，两个 `DATEDIFF` 全为 1 即连续三天。
+- 方法 3 三次自关联逐级 `DATEDIFF = 1` 衔接：a→b 差 1 天，b→c 差 1 天，即 a/b/c 连续三天。
+
+**4. 知识点延伸**：
+
+| 方法 | 通用性 | 扩展到 N 天 | 性能 | 需要窗口函数 |
+|---|---|---|---|---|
+| row_number 差值法 | 任意 N 天 | 直接改 `HAVING COUNT(*) >= N` | O(n log n) | 是 |
+| lag 法 | 需 N-1 个前值 | N 大时要写 N-1 个 LAG 列，不可扩展 | O(n log n) | 是 |
+| 自关联法 | 需 N-1 次 JOIN | N 大时 N-1 次自关联，SQL 膨胀 | O(n^N) 最差 | 否 |
+
+> row_number 差值法最通用，面试首选；自关联法虽性能最差，但不依赖窗口函数——部分老旧数据库或面试考察 SQL 基本功时可能问到。
+
+**5. 面试追问**：
+
+- **Q: N 很大（连续 30 天）用哪个？** A: row_number 差值法，lag 要写 29 个前值列，自关联要 29 次 JOIN。
+- **Q: 自关联法的性能风险？** A: 每次自关联近似 n^2 次比较，大数据量必炸——仅适用于小数据集或面试展示基本功。
+- **Q: datediff 方向？** A: `DATEDIFF(a, b)` = a - b（天数），别记反。
+
+</details>
+
+---
+
+### Q3. 连胜数 `★★★☆☆` `胜负`
+
+> 来源：项目题号 `01_07`　表：`games`
+
+**表结构：**
+
+| user_id | date | result |
+|---|---|---|
+| 1 | 2024-01-01 | win |
+| 1 | 2024-01-02 | win |
+| 1 | 2024-01-03 | lose |
+
+计算每个用户的连胜数（最长连续胜场）。
+
+*提示：连续类题的变体——把"连续"条件从日期改为胜负状态；把 win 的行单独拎出来，然后用 row_number 差值法。*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：连续问题的变体——将"连续日期"换成"连续状态"。先用 `WHERE result = 'win'` 过滤出胜场，再用差值法或断点标记法分组计数。
+
+**2. 参考 SQL（Hive 方言）**：
+
+**解法 1：双 row_number 差值法**
+
+```sql
+WITH numbered AS (
+    SELECT user_id, date, result,
+           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY date) AS rn,
+           ROW_NUMBER() OVER (PARTITION BY user_id, result ORDER BY date) AS rn2
+    FROM games
+    WHERE result = 'win'
+)
+SELECT user_id, MAX(streak) AS max_streak
+FROM (
+    SELECT user_id, rn - rn2 AS grp, COUNT(*) AS streak
+    FROM numbered
+    GROUP BY user_id, grp
+) t
+GROUP BY user_id;
+```
+
+**解法 2：lag + case 造断点标记，sum() over 累加分段**
+
+```sql
+WITH marked AS (
+    SELECT user_id, date, result,
+           CASE WHEN result = 'win'
+                AND LAG(result) OVER (PARTITION BY user_id ORDER BY date) = 'win'
+                THEN 0 ELSE 1 END AS new_streak
+    FROM games
+)
+SELECT user_id,
+       SUM(new_streak) OVER (PARTITION BY user_id ORDER BY date) AS streak_id,
+       COUNT(*) AS streak_len
+FROM marked
+WHERE result = 'win'
+GROUP BY user_id, streak_id;
+```
+
+**3. 关键解析**：
+
+- 解法 1 中 `rn` 是全局行序，`rn2` 是 win 行内的行序。连续 win 段内两者同步递增，差值恒定；一旦插入 lose，`rn` 继续递增但 `rn2` 重置，差值跳变——形成新的分组。
+- 解法 2 中 `CASE WHEN ... THEN 0 ELSE 1` 标记"新连胜段起点"为 1、延续为 0，`SUM() OVER` 累加后得到连胜段编号。
+
+**4. 知识点延伸**：
+
+**区间合并：断点标记 + 累加分段的经典应用（01_06 集度面试题）**
+
+给定日期区间表 `test_xiaoming(id, name, start_date, end_date)`，合并连续或重叠的区间：
+
+```sql
+WITH t1 AS (
+    SELECT id, name, start_date, end_date,
+           LAG(end_date) OVER (PARTITION BY id, name ORDER BY start_date) AS lag_date,
+           CASE
+               WHEN date_add(LAG(end_date) OVER (PARTITION BY id, name ORDER BY start_date), 1) = start_date
+               THEN 0 ELSE 1
+           END AS new_group_flag
+    FROM test_xiaoming
+),
+t2 AS (
+    SELECT id, name, start_date, end_date,
+           SUM(new_group_flag) OVER (PARTITION BY id, name ORDER BY start_date) AS group_id
+    FROM t1
+)
+SELECT id, name,
+       MIN(start_date) AS start_date,
+       MAX(end_date) AS end_date
+FROM t2
+GROUP BY id, name, group_id
+ORDER BY MIN(start_date), id, name;
+```
+
+> 此模式与 Q3 解法 2 同构：**「断点标记（CASE 0/1）+ SUM() OVER 累加分段」**。区别在于判定连续的条件——Q3 是"前一行也是 win"，01_06 是"前区间 end + 1 = 当前 start"。
+
+**5. 面试追问**：
+
+- **Q: 连续的"单位"从日期换成状态/数值怎么办？** A: 套路不变，先过滤/标记成 0/1，再分段。
+- **Q: 双 row_number 差值为什么能分组？** A: win 行之间若被 lose 隔断，`rn` 与 `rn2` 的增速不同步，差值跳变——跳变点即新连胜段起点。
+
+</details>
+
 <!-- APPEND -->
