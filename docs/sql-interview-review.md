@@ -386,4 +386,208 @@ ORDER BY MIN(start_date), id, name;
 
 </details>
 
+---
+
+## 组2 开窗函数 lead/lag
+
+---
+
+### Q4. 波峰波谷 `★★★☆☆` `lead` `lag` `波峰波谷`
+
+> 来源：项目题号 `02_01`　表：`stock_price`
+
+**表结构：**
+
+| id (INTEGER) | ds (TEXT) | price (FLOAT) |
+|---|---|---|
+| 1 | 2024-01-01 | 10.0 |
+| 1 | 2024-01-02 | 12.5 |
+| 1 | 2024-01-03 | 11.0 |
+
+给定股票/商品价格时间序列表 `stock_price(id, ds, price)`，标记每个时间点是「波峰」还是「波谷」。
+波峰：价格大于前一天和后一天；波谷反之。
+
+*提示：lag 看前一天，lead 看后一天，用 case when 判断。*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：经典的「前后值比较」套路——用 LAG 取前一天价格、LEAD 取后一天价格，再用 CASE WHEN 判断当前价格是否同时大于/小于前后值。必须包一层子查询先算出前后值，外层再做 CASE 判断。
+
+**2. 参考 SQL（Hive 方言）**：
+
+```sql
+-- 步骤二：外层根据前后值判断波峰波谷
+SELECT id, ds, price,
+       CASE WHEN price > lag_price AND price > lead_price THEN '波峰'
+            WHEN price < lag_price AND price < lead_price THEN '波谷'
+            ELSE '持平' END AS type
+FROM (
+    -- 步骤一：内层用 lag/lead 取前后价格
+    SELECT id, ds, price,
+           LAG(price) OVER (PARTITION BY id ORDER BY ds) AS lag_price,
+           LEAD(price) OVER (PARTITION BY id ORDER BY ds) AS lead_price
+    FROM stock_price
+) t;
+```
+
+**3. 关键解析**：
+
+- 必须包一层子查询再外层 `CASE WHEN`：虽然部分引擎允许在 CASE 里直接嵌套窗口函数，但包一层子查询是最稳定的写法，可读性也更好。
+- `PARTITION BY id` 按股票/商品分组，避免跨品种比较；`ORDER BY ds` 保证时间序列顺序。
+
+**4. 知识点延伸**：
+
+**LAG / LEAD 基础语法（吸收 02_02：前后列转换）**
+
+```sql
+SELECT id, date, value,
+       LAG(value) OVER (PARTITION BY id ORDER BY date) AS prev_value,
+       LEAD(value) OVER (PARTITION BY id ORDER BY date) AS next_value
+FROM data_table;
+```
+
+- `LAG(col, n, default)` 三参数：列名、偏移量（默认 1）、越界默认值（默认 NULL）。
+- `LEAD(col, n, default)` 同理，向前/向后取值。
+- 首行 LAG 为 NULL 的处理：`LAG(price, 1, price)` 用自身值填充，避免 NULL 干扰后续计算。
+
+**5. 面试追问**：
+
+- **Q: 首尾行为 NULL 怎么办？** A: 使用第三参数 default（如 `LAG(price, 1, price)` 用自身填充）或外层 `COALESCE(lag_price, price)`。
+- **Q: 相邻两天价格相等算峰吗？** A: 题面使用严格大于/小于（`>` / `<`），相等归入「持平」。实际业务中边界口径需与面试官确认。
+
+</details>
+
+---
+
+### Q5. 变化率计算 `★★★☆☆` `lag` `面试`
+
+> 来源：项目题号 `02_03`　表：`metrics`
+
+**表结构：**
+
+| date (TEXT) | value (INTEGER) |
+|---|---|
+| 2024-01-01 | 100 |
+| 2024-01-02 | 120 |
+| 2024-01-03 | 115 |
+
+给定指标表 `metrics(date, value)`，计算每日的环比变化率。
+
+*提示：lag 取前值，计算差值/变化率。*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：用 LAG 取前一行的 value，计算 `(当前 - 前值) / 前值 * 100` 即为环比变化率。注意乘 `100.0` 防止整数除法丢失精度。
+
+**2. 参考 SQL（Hive 方言）**：
+
+```sql
+-- 面试题典型场景：计算变化率
+SELECT date, value,
+       LAG(value) OVER (ORDER BY date) AS prev_value,
+       ROUND((value - LAG(value) OVER (ORDER BY date)) * 100.0
+             / LAG(value) OVER (ORDER BY date), 2) AS change_pct
+FROM metrics;
+```
+
+**3. 关键解析**：
+
+- `* 100.0` 是关键：SQL 中两个整数相除会截断小数部分（如 `20 / 100 = 0`），乘以 `100.0` 将表达式提升为浮点运算。
+- `ROUND(..., 2)` 保留两位小数，便于阅读。
+- 同一个 `LAG(value) OVER (ORDER BY date)` 写了三次，引擎只计算一次（优化器去重）。
+
+**4. 知识点延伸**：
+
+- **环比 vs 同比口径**：环比 = 与上一期比（月环比、周环比）；同比 = 与去年同期比（如今年 1 月 vs 去年 1 月）。同比需在 PARTITION BY 中引入年份维度。
+- **首行 NULL 变化率**：第一行没有前值，LAG 返回 NULL，计算结果也为 NULL。业务上可用 `COALESCE(change_pct, 0)` 或直接过滤。
+
+**5. 面试追问**：
+
+- **Q: 前值为 0 怎么办？** A: 必须防除零：`CASE WHEN prev_value = 0 THEN NULL ELSE ROUND((value - prev_value) * 100.0 / prev_value, 2) END`。除零会产生运行时错误或返回 NULL，不可忽略。
+- **Q: 环比和同比在 SQL 写法上有什么区别？** A: 同比需要在 PARTITION BY 中加入周期维度（如月份），使 LAG 跨年回溯而非取相邻行。
+
+</details>
+
+---
+
+## 组3 三种排序开窗
+
+---
+
+### Q6. 三种排序开窗：row_number / rank / dense_rank `★★☆☆☆` `row_number` `rank` `dense_rank` `topN`
+
+> 来源：项目题号 `03_01`　表：`scores`
+
+**表结构：**
+
+| student (TEXT) | score (INTEGER) |
+|---|---|
+| a | 90 |
+| b | 90 |
+| c | 85 |
+| d | 80 |
+
+掌握三种排序开窗函数的区别：
+
+- `row_number()`: 连续编号 1,2,3,4...（不并列）
+- `rank()`: 跳号 1,2,2,4...（并列同号，下一个跳号）
+- `dense_rank()`: 不跳号 1,2,2,3...（并列同号，下一个不跳）
+
+*提示：row_number: 1,2,3,4 严格递增；rank: 1,2,2,4 跳跃；dense_rank: 1,2,2,3 不跳跃。*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：同一张表上同时调用三个排序函数，直观对比输出差异。理解并列场景下各函数的行为是面试高频考点。
+
+**2. 参考 SQL（Hive 方言）**：
+
+```sql
+SELECT student, score,
+       ROW_NUMBER() OVER (ORDER BY score DESC) AS rn,
+       RANK()       OVER (ORDER BY score DESC) AS rk,
+       DENSE_RANK() OVER (ORDER BY score DESC) AS dr
+FROM scores;
+```
+
+**3. 关键解析**：
+
+- 三个函数共享同一个 `OVER (ORDER BY score DESC)`，区别仅在于并列时的编号策略。
+
+**三函数输出对照表（示例数据含并列）**：
+
+| student | score | rn (row_number) | rk (rank) | dr (dense_rank) |
+|---|---|---|---|---|
+| a | 90 | 1 | 1 | 1 |
+| b | 90 | 2 | 1 | 1 |
+| c | 85 | 3 | 3 | 2 |
+| d | 80 | 4 | 4 | 3 |
+
+- `row_number`：并列也分先后（顺序不确定），编号严格 1,2,3,4。
+- `rank`：并列同号（a、b 都为 1），下一个跳到 3（没有第 2 名）。
+- `dense_rank`：并列同号（a、b 都为 1），下一个紧接为 2（不跳号）。
+
+**4. 知识点延伸**：
+
+**每个学生成绩第二高的科目（吸收 03_02）**
+
+```sql
+SELECT student, subject
+FROM (
+    SELECT student, subject, score,
+           DENSE_RANK() OVER (PARTITION BY student ORDER BY score DESC) AS dr
+    FROM student_scores
+) t
+WHERE dr = 2;
+```
+
+- `PARTITION BY student` 按学生分组，每个学生内部独立排序。
+- 使用 `dense_rank` 而非 `rank` 的原因：如果有并列第一，`rank` 会跳到 3，导致 `WHERE rk = 2` 取不到任何行。`dense_rank` 保证并列后紧接 2，一定能取到第二名。
+
+**5. 面试追问**：
+
+- **Q: TopN 并列时只取一条怎么办？** A: 用 `row_number()`，它不并列，每行编号唯一，`WHERE rn <= N` 严格取 N 条。
+- **Q: 取第 N 高为什么推荐 dense_rank？** A: 并列不跳号，第 N 名一定存在。例如取第二名，即使有并列第一，`dense_rank` 的第二名编号仍为 2；而 `rank` 的第二名编号可能跳到 3。
+
+</details>
+
 <!-- APPEND -->
