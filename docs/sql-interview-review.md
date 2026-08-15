@@ -1465,4 +1465,234 @@ WHERE trim(raw_item) != '';
 
 ---
 
+## 组9 综合与建模
+
+### Q19. 接雨水问题 `★★★★★` `趣味` `算法` `接雨水`
+
+> 来源：项目题号 `14_01`　表：`heights`
+
+| height |
+|--------|
+| 0      |
+| 1      |
+| 0      |
+| 2      |
+| 1      |
+| 0      |
+| 1      |
+| 3      |
+| 2      |
+| 1      |
+| 2      |
+| 1      |
+
+给定柱子高度数组，计算能接多少雨水。
+
+*提示：每个位置的储水量 = min(左边最高, 右边最高) - 当前高度；用 max() over(order by) 分别计算左右两边的滚动最大值*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：把数组转成行表后，对每行分别计算左侧滚动最大值和右侧滚动最大值，利用木桶效应：储水量 = 两侧最高柱的较小者 - 当前行高度。
+
+**2. 参考 SQL（Hive 方言）**：
+
+```sql
+-- step 1: 给行编号，把"数组题"变成"行题"
+WITH numbered AS (
+    SELECT ROW_NUMBER() OVER () AS idx, height
+    FROM heights
+),
+-- step 2: 左侧滚动最大值（从左往右）
+left_max AS (
+    SELECT idx, height,
+           MAX(height) OVER (ORDER BY idx ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS lmax
+    FROM numbered
+),
+-- step 3: 右侧滚动最大值（从右往左，反向帧）
+right_max AS (
+    SELECT idx, height, lmax,
+           MAX(height) OVER (ORDER BY idx DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS rmax
+    FROM left_max
+)
+-- step 4: 求总储水量
+SELECT SUM(LEAST(lmax, rmax) - height) AS total_water
+FROM right_max
+WHERE LEAST(lmax, rmax) > height;
+```
+
+**3. 关键解析**：
+
+- **`ROW_NUMBER() OVER () AS idx`**：`heights` 表没有位置列，需要 `row_number()` 给每行编号，将"数组"转换为带索引的"行表"，后续窗口排序才有依据。
+- **左侧滚动最大值 `MAX(height) OVER (ORDER BY idx ... PRECEDING AND CURRENT ROW)`**：从第 1 行到当前行的 height 最大值，即"左边比当前高的柱子中最高的"。
+- **右侧滚动最大值 `ORDER BY idx DESC`**：降序排列后取 UNBOUNDED PRECEDING 到 CURRENT ROW，等价于原始顺序中"从当前行到最后一行的最大值"，即右边的最高柱。
+- **`LEAST(lmax, rmax) - height`**：木桶效应——水位由两侧较矮的那根柱子决定，减去当前柱高就是该位置的储水量。
+
+**4. 知识点延伸**：
+
+- **算法题 SQL 化的一般套路**：先找"逐行可计算的局部量"（左侧最大值、右侧最大值），再用窗口函数/聚合将局部量组合成最终结果。大多数数组类算法题都可以用这个思路搬到 SQL 中。
+- **反向帧技巧**：`ORDER BY idx DESC` + `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` 可以实现"从右往左"的滚动计算，是处理双向扫描类问题的标准手法。
+
+**5. 面试追问**：
+
+- **Q: 为什么两端柱子不接水？** A: `LEAST(lmax, rmax)` 中必有一侧是自身高度（最左端 rmax 包含自身、最右端 lmax 包含自身），差值一定为 0，被 `WHERE LEAST(lmax, rmax) > height` 过滤掉。
+- **Q: Hive 里多参数取最小值用哪个函数？** A: `LEAST(a, b, ...)`。SQLite 中部分引擎用 `MIN(a, b, ...)`——这是方言差异的常见坑点。注意 `MIN()` 在多数 SQL 中是聚合函数，但 SQLite 允许它做标量多参取小，Hive/Spark 则严格区分 `LEAST()`（标量）和 `MIN()`（聚合）。
+
+> 📌 SQLite 等价写法：
+> ```sql
+> -- SQLite 用 MIN() 替代 LEAST()，其余窗口语法相同
+> WITH numbered AS (
+>     SELECT ROW_NUMBER() OVER () AS idx, height
+>     FROM heights
+> ),
+> left_max AS (
+>     SELECT idx, height,
+>            MAX(height) OVER (ORDER BY idx ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS lmax
+>     FROM numbered
+> ),
+> right_max AS (
+>     SELECT idx, height, lmax,
+>            MAX(height) OVER (ORDER BY idx DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS rmax
+>     FROM left_max
+> )
+> SELECT SUM(MIN(lmax, rmax) - height) AS total_water
+> FROM right_max
+> WHERE MIN(lmax, rmax) > height;
+> ```
+
+</details>
+
+---
+
+### Q20. 赛马问题 `★★★★☆` `趣味` `赛马` `非等值关联`
+
+> 来源：项目题号 `14_03`　表：`race_result`
+
+| horse | time |
+|-------|------|
+| 甲    | 9.8  |
+| 乙    | 10.2 |
+| 丙    | 9.9  |
+
+如何用 SQL 解决趣味赛马问题（非等值关联匹配）——为每匹马找到比它快的那匹马。
+
+*提示：非等值 JOIN 模拟排序，子查询取前一个值*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：通过非等值关联 `b.time < a.time` 找出每匹马所有比它快的马，再用相关子查询 `MIN(time)` 收敛到"紧邻更快的那匹"。
+
+**2. 参考 SQL（Hive 方言）**：
+
+```sql
+-- 非等值关联：找每匹马比自己快的前一匹
+SELECT a.horse, a.time,
+       b.horse AS faster_horse
+FROM race_result a
+LEFT JOIN race_result b ON b.time < a.time
+WHERE b.time = (SELECT MIN(time) FROM race_result WHERE time < a.time);
+```
+
+**3. 关键解析**：
+
+- **`b.time < a.time`**：非等值关联条件，匹配所有 time 比当前马小的记录——即所有更快的马。
+- **`WHERE b.time = (SELECT MIN(time) FROM race_result WHERE time < a.time)`**：在所有更快马中，取 time 最小的（即最接近的、紧邻的更快者），从笛卡尔结果中筛选出唯一一行。
+- **`LEFT JOIN`**：保证最快的马（没有比它更快的）也能出现在结果中，其 faster_horse 为 NULL。
+
+**4. 知识点延伸**：
+
+- **更优雅的窗口解法（面试加分）**：用 `LAG` 一步到位，避免非等值 JOIN 的笛卡尔放大：
+
+```sql
+SELECT horse, time,
+       LAG(horse) OVER (ORDER BY time) AS faster_neighbor
+FROM race_result;
+```
+
+按 time 排序后，`LAG` 直接取前一行（即紧邻更快的那匹马），无需 JOIN 和子查询。这是更推荐的生产写法。
+
+- **非等值 JOIN 的风险**：`b.time < a.time` 会产生笛卡尔乘积放大（每行匹配行数不固定），无法使用 hash join，只能走 nested loop，大数据量下性能极差。生产环境应优先使用窗口函数替代。
+
+**5. 面试追问**：
+
+- **Q: 非等值 JOIN 有什么问题？** A: 无法按 join key 做 hash 分桶，只能走 nested loop（嵌套循环），时间复杂度 O(n^2)。而且会产生数据放大（每行匹配行数不固定），结果集可能远大于原表。生产环境大数据量下基本禁用。
+- **Q: 一条 SQL 顺手解决的话怎么写？** A: `LAG(horse) OVER (ORDER BY time)` 一步到位——按 time 升序排列后，LAG 取前一行即紧邻更快者。比非等值 JOIN + 子查询更简洁高效。
+
+</details>
+
+---
+
+### Q21. 人事数仓表格设计 `★★★☆☆` `数仓` `表格设计` `人事`
+
+> 来源：项目题号 `10_02`　表：`employee`, `salary`, `attendance`
+
+本题无表结构，为建模设计题。
+
+设计人事数仓核心表结构：员工表、薪资表、考勤表。
+
+*提示：标准数仓建模——事实表 + 维度表，星型/雪花模型*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：按数仓建模最佳实践，将表分为维度表（描述"谁"，变化慢）和事实表（记录"发生了什么"，按周期增长），围绕核心业务（员工薪资、考勤）设计星型或雪花模型。
+
+**2. 参考建表语句（带建模注释）**：
+
+```sql
+-- ========================================
+-- 维度表：描述"谁"
+-- ========================================
+
+-- 员工维度表（变化慢，记录员工基本信息）
+-- 是整个数仓的核心维度，薪资和考勤事实表都通过 emp_id 关联
+CREATE TABLE employee (
+    emp_id    INTEGER PRIMARY KEY,  -- 员工唯一标识，全表主键
+    name      TEXT,                 -- 员工姓名
+    dept_id   INTEGER,             -- 部门 ID（可外键关联部门表，形成雪花模型）
+    hire_date TEXT,                -- 入职日期
+    status    TEXT                  -- 在职状态（active/inactive/resigned）
+);
+
+-- ========================================
+-- 事实表：记录"发生了什么"
+-- ========================================
+
+-- 薪资事实表（按月增长，每月每员工一条）
+-- 联合主键 (emp_id, month) 支撑周期快照事实表设计
+CREATE TABLE salary (
+    emp_id      INTEGER,            -- 员工 ID（维度代理键，冗余以避免频繁 JOIN）
+    month       TEXT,               -- 薪资月份（如 '2024-01'）
+    base_salary REAL,               -- 基本工资
+    bonus       REAL,               -- 奖金
+    PRIMARY KEY (emp_id, month)    -- 联合主键：同一员工同月只有一条记录
+);
+
+-- 考勤事实表（按天增长，每日每员工一条）
+CREATE TABLE attendance (
+    emp_id    INTEGER,             -- 员工 ID
+    date      TEXT,                 -- 考勤日期
+    check_in  TEXT,                 -- 签到时间
+    check_out TEXT                  -- 签退时间
+);
+```
+
+**3. 关键解析**：
+
+- **维度表 vs 事实表**：`employee` 是维度表（描述主体"谁"，数据量小、变化慢）；`salary` 和 `attendance` 是事实表（记录事件"发生了什么"，按时间周期持续增长）。数仓设计的核心就是区分这两类表并建立关联。
+- **星型 vs 雪花模型**：当前设计为星型模型——事实表（salary/attendance）居中，直接通过 emp_id 关联维度表（employee），查询时只需一次 JOIN。如果部门信息拆为独立的 department 表，employee 再关联 department，就形成雪花模型（维度再规范化），查询需要多一次 JOIN。
+- **联合主键 `(emp_id, month)`**：保证同一员工同月只有一条薪资记录，这是周期快照事实表（periodic snapshot fact table）的标准设计。
+
+**4. 知识点延伸**：
+
+- **拉链表处理员工维度缓慢变化（SCD）**：当员工调部门或改状态时，维度表需要保留历史。拉链表通过 `start_date` / `end_date` 两个时间字段实现：新增一条记录写入新值和 start_date，旧记录的 end_date 设为新记录生效日期的前一天。查询时加 `WHERE start_date <= 当前日期 AND end_date > 当前日期` 即取到当前有效记录。
+- **emp_id 冗余在事实表的原因**：`emp_id` 作为维度代理键（surrogate key）冗余存放在事实表中，是数仓的标准做法。这样事实表查询时可直接 JOIN 维度表获取详细信息，避免在事实表中冗余大量描述性字段（如姓名、部门名），既控制事实表宽度，又保证查询性能。
+
+**5. 面试追问**：
+
+- **Q: 星型模型和雪花模型怎么选？** A: 数仓默认选星型模型——事实表直接关联维度表，查询 JOIN 少、性能好，适合 OLAP 场景。雪花模型对维度进一步规范化（拆子维度表），减少数据冗余但增加 JOIN 次数。选型权衡：查询性能（少 JOIN）vs 存储冗余控制，大多数数仓场景下星型模型是更实用的选择。
+- **Q: 员工调部门的历史怎么保留？** A: 用拉链表（start_date / end_date）。每次部门变动插入一条新记录，旧记录关闭 end_date。查询时用 `WHERE start_date <= ? AND end_date > ?` 取当前有效行。这与 Q3 的区间分段思想一脉相承——用起止时间区间来表示一个状态的生效周期。
+
+</details>
+
+---
+
 <!-- APPEND -->
