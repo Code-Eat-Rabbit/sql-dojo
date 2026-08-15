@@ -74,10 +74,10 @@
 |---|---|---|
 | 年 | `substr(date, 1, 4)` 或 `year(date)` | 11_01 即此 |
 | 月 | `substr(date, 6, 2)` 或 `month(date)` | |
-| 季度 | `concat(substr(date,1,4), 'Q', cast((month(date)-1)/3+1 as string))` | 公式 `(m-1)/3+1` 必会手写 |
-| 半年 | 同上，`(m-1)/6+1` | |
+| 季度 | `concat(substr(date,1,4), 'Q', cast((month(date)-1) div 3+1 as string))` | 公式 `(m-1) div 3+1` 必会手写；Hive 整除用 div |
+| 半年 | 同上，`(m-1) div 6+1` | |
 | 年月 | `substr(date, 1, 7)` 或 `date_format(date,'yyyy-MM')` | |
-| 日期差 | `datediff(a, b)`（a-b 天数） | Q1 Q2 |
+| 日期差 | `datediff(a, b)`（a-b 天数） | Q2 |
 | 日期增减 | `date_add(d, n)` / `date_sub(d, n)`（n 可为负） | Q1 Q14 |
 | 取日期部分 | `to_date('2024-01-01 10:00:00')` → `2024-01-01` | 等价 substr(d,1,10) |
 | 月末 | `last_day(d)` | 滚动窗口常用 |
@@ -92,14 +92,12 @@
 3. **COUNT(DISTINCT) 数据倾斜**：单个 reducer 聚合大维度 → 先 `group by` 预聚合打散，或两阶段 distinct、 bitmap；高维维度拆分。
 4. **千亿级 join 优化**：小表广播（map-side join / mapjoin）、分桶表（bucket join，同键落同节点）、Bloom filter 预过滤、避免非等值 join 的笛卡尔放大（Q13 追问展开）。
 5. **union all vs union**：union all 保留全部（含重复），进出场计数必须用 union all；union 去重触发 shuffle，代价高。
-6. **Hive 与标准 SQL 差异**：`date_add(d, n)` 不是 `INTERVAL` 语法；多参取小用 `least()`（SQLite 是 `min()`）；`collect_list/collect_set` vs `group_concat`；`get_json_object` vs `json_extract`。
+6. **Hive 与标准 SQL 差异**：`date_add(d, n)` 不是 `INTERVAL` 语法；`/` 恒返回 double，整除用 `div`；多参取小用 `least()`（SQLite 是 `min()`）；`collect_list/collect_set` vs `group_concat`；`get_json_object` vs `json_extract`。
 7. **什么时候用递归 CTE，什么时候用开窗**：先看能否用 `row_number/lag + 聚合开窗` 的"分段子问题"套路解决（连续、分段、层级汇总大多可以）；真需要逐行传递状态（如逐行 forward fill、树遍历）才用递归——面试先答开窗解法是加分项（源自题 10_01 的辨析）。
 
 # Part 2 精选题册
 
 ## 组1 连续问题
-
----
 
 ### Q1. 查询连续登陆3天以上的用户 `★★☆☆☆` `字节面试题`
 
@@ -261,7 +259,7 @@ JOIN (
 
 **3. 关键解析**：
 
-- 方法 2 用 `LAG(date, 1)` 和 `LAG(date, 2)` 取前两天，两个 `DATEDIFF` 全为 1 即连续三天。
+- 方法 2 用 `LAG(date, 1)` 和 `LAG(date, 2)` 取前两天，两个 `DATEDIFF` 全为 1 即连续三天。前两行 prev1/prev2 为 NULL 时 `DATEDIFF(date, NULL)` 结果为 NULL、不满足 `= 1` 自动排除，无需特殊处理。
 - 方法 3 三次自关联逐级 `DATEDIFF = 1` 衔接：a→b 差 1 天，b→c 差 1 天，即 a/b/c 连续三天。
 
 **4. 知识点延伸**：
@@ -309,21 +307,26 @@ JOIN (
 **解法 1：双 row_number 差值法**
 
 ```sql
+-- 解法1：双 row_number 差值法（修正版）
 WITH numbered AS (
     SELECT user_id, date, result,
            ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY date) AS rn,
            ROW_NUMBER() OVER (PARTITION BY user_id, result ORDER BY date) AS rn2
-    FROM games
-    WHERE result = 'win'
+    FROM games                      -- 注意：不能在这里过滤 win！
 )
 SELECT user_id, MAX(streak) AS max_streak
 FROM (
     SELECT user_id, rn - rn2 AS grp, COUNT(*) AS streak
     FROM numbered
+    WHERE result = 'win'            -- 过滤放在窗口计算之后
     GROUP BY user_id, grp
 ) t
 GROUP BY user_id;
 ```
+
+> **勘误框**：manifest 原答案将 `WHERE result='win'` 放在 CTE 内部，导致窗口函数只看到 win 行，`PARTITION BY user_id, result` 退化为 `PARTITION BY user_id`，rn 与 rn2 恒相等、差值恒 0，所有 win 行被并为同一组——连胜数变成了总胜场（实测 `win,win,lose,win,win` 返回 4 而非正确答案 2）。
+>
+> 正确机制：rn 基于**全部行**编号（含 lose），rn2 基于 `user_id, result` 分区后只对 win 行编号；连续 win 段内两序号同步递增、差值恒定，被 lose 隔断后 rn 继续递增而 rn2 重置、差值跳变——这才是分组的来源。因此 `WHERE result='win'` 必须放在窗口计算之后。
 
 **解法 2：lag + case 造断点标记，sum() over 累加分段**
 
@@ -345,7 +348,7 @@ GROUP BY user_id, streak_id;
 
 **3. 关键解析**：
 
-- 解法 1 中 `rn` 是全局行序，`rn2` 是 win 行内的行序。连续 win 段内两者同步递增，差值恒定；一旦插入 lose，`rn` 继续递增但 `rn2` 重置，差值跳变——形成新的分组。
+- 解法 1 中 `rn` 基于**全部行**编号（含 lose），`rn2` 基于 `user_id, result` 分区后只对 win 行编号。连续 win 段内两者同步递增、差值恒定；被 lose 隔断后 rn 继续递增而 rn2 重置、差值跳变——形成新分组。关键：`WHERE result='win'` 必须在窗口计算之后，否则 CTE 只看到 win 行，rn 与 rn2 退化相等。
 - 解法 2 中 `CASE WHEN ... THEN 0 ELSE 1` 标记"新连胜段起点"为 1、延续为 0，`SUM() OVER` 累加后得到连胜段编号。
 
 **4. 知识点延伸**：
@@ -382,15 +385,13 @@ ORDER BY MIN(start_date), id, name;
 **5. 面试追问**：
 
 - **Q: 连续的"单位"从日期换成状态/数值怎么办？** A: 套路不变，先过滤/标记成 0/1，再分段。
-- **Q: 双 row_number 差值为什么能分组？** A: win 行之间若被 lose 隔断，`rn` 与 `rn2` 的增速不同步，差值跳变——跳变点即新连胜段起点。
+- **Q: 双 row_number 差值为什么能分组？** A: win 行之间若被 lose 隔断，`rn`（全局序）继续递增而 `rn2`（win 行内序）重置，差值跳变——跳变点即新连胜段起点。注意 `WHERE result='win'` 必须在窗口计算之后，否则 CTE 只含 win 行，两个分区退化等价，差值恒 0。
 
 </details>
 
 ---
 
 ## 组2 开窗函数 lead/lag
-
----
 
 ### Q4. 波峰波谷 `★★★☆☆` `lead` `lag` `波峰波谷`
 
@@ -492,7 +493,7 @@ FROM metrics;
 
 **3. 关键解析**：
 
-- `* 100.0` 是关键：SQL 中两个整数相除会截断小数部分（如 `20 / 100 = 0`），乘以 `100.0` 将表达式提升为浮点运算。
+- `* 100.0` 是关键：整数相除截断是 SQLite/Postgres 等引擎的行为（本项目本地 SQLite 即如此，如 `20 / 100 = 0`）；Hive 的 `/` 恒返回 double，无此问题。但 `*100.0` 写法跨方言稳健、无害，保留是好习惯。
 - `ROUND(..., 2)` 保留两位小数，便于阅读。
 - 同一个 `LAG(value) OVER (ORDER BY date)` 写了三次，引擎只计算一次（优化器去重）。
 
@@ -511,8 +512,6 @@ FROM metrics;
 ---
 
 ## 组3 三种排序开窗
-
----
 
 ### Q6. 三种排序开窗：row_number / rank / dense_rank `★★☆☆☆` `row_number` `rank` `dense_rank` `topN`
 
@@ -932,32 +931,49 @@ GROUP BY group_id;
 
 用上一个非空值填充缺失值（forward fill）。
 
-*提示：用子查询查最近的非空值，或递归 CTE 逐行填充*
+*提示：窗口函数 CASE+MAX 取最近非空日期再自关联，或相关子查询取"最近的非空前值"*
 
 <details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
 
-**1. 解题思路**：对每一行，如果当前 value 为 NULL，就去同一 id 中找日期早于当前行的最近一条非 NULL 记录，用它的 value 填充——相关子查询天然表达"找最近非空前值"的语义。
+**1. 解题思路**：对每一行，如果当前 value 为 NULL，就用同一 id 中最近一条非 NULL 记录的 value 填充。窗口函数解法：用 `CASE + MAX() OVER` 标记"最近非空日期"，再自关联回原表取值——与 Q3 的"断点标记+累加分段"同宗。
 
 **2. 参考 SQL（Hive 方言）**：
 
 ```sql
--- 用相关子查询填充
-WITH filled AS (
+-- 窗口函数版：CASE 造非空日期 + MAX 累计开窗取最近一次非空出现位置
+WITH marked AS (
     SELECT id, date, value,
-           CASE WHEN value IS NOT NULL THEN value
-                ELSE (SELECT t2.value FROM data_table t2
-                      WHERE t2.id = t1.id AND t2.date < t1.date AND t2.value IS NOT NULL
-                      ORDER BY t2.date DESC LIMIT 1)
-           END AS filled_value
-    FROM data_table t1
+           MAX(CASE WHEN value IS NOT NULL THEN date END)
+               OVER (PARTITION BY id ORDER BY date
+                     ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS last_nn_date
+    FROM data_table
 )
-SELECT * FROM filled;
+SELECT m.id, m.date, m.value,
+       t.value AS filled_value
+FROM marked m
+LEFT JOIN data_table t
+  ON t.id = m.id AND t.date = m.last_nn_date;
 ```
+
+> **SQLite/本地练习写法**（相关子查询版，O(n^2) 性能，部分 Hive 版本不支持子查询内 LIMIT）：
+> ```sql
+> WITH filled AS (
+>     SELECT id, date, value,
+>            CASE WHEN value IS NOT NULL THEN value
+>                 ELSE (SELECT t2.value FROM data_table t2
+>                       WHERE t2.id = t1.id AND t2.date < t1.date AND t2.value IS NOT NULL
+>                       ORDER BY t2.date DESC LIMIT 1)
+>            END AS filled_value
+>     FROM data_table t1
+> )
+> SELECT * FROM filled;
+> ```
 
 **3. 关键解析**：
 
-- 相关子查询对每一行执行一次"在同一 id 内按日期倒序找最近非 NULL 值"的查询，`LIMIT 1` 只取最近的一条。
-- 性能警告：相关子查询的时间复杂度为 O(n²)——外层 n 行，每行触发一次子查询扫描。数据量大时需要考虑窗口函数方案或递归 CTE 替代。
+- **`MAX(CASE WHEN value IS NOT NULL THEN date END) OVER(...)`**：核心技巧——CASE 将 NULL 值的位置填为 NULL（不参与 MAX），非 NULL 值的位置保留日期，MAX 累计开窗取到截至当前行的最近一个非 NULL 日期。这是"标记最近非空日期"的标准写法。
+- **自关联取值**：拿到 `last_nn_date` 后，LEFT JOIN 回原表取出该日期的 value——因为非 NULL 行的 `last_nn_date = date`，所以自身匹配；NULL 行匹配到最近的非 NULL 行。
+- **相关子查询版（备注块）**的时间复杂度为 O(n^2)，外层 n 行每行触发一次子查询扫描。窗口函数版 O(n)，是生产环境的首选。
 
 **4. 知识点延伸**：
 
@@ -971,8 +987,6 @@ FROM status_log;
 
 - `LEAD(start_time)` 取同一 id 下按 start_time 排序的下一行时间，作为当前状态的结束时刻。最后一个状态的 end_time 为 NULL（表示持续到当前）。
 
-> Hive 备注写法：子查询内 `LIMIT` 在部分 Hive 版本中不支持，可改用 `ROW_NUMBER()` 取 `rn=1` 的行：`SELECT value FROM (SELECT value, ROW_NUMBER() OVER(ORDER BY date DESC) AS rn FROM ... WHERE value IS NOT NULL) t WHERE rn = 1`。
-
 **5. 面试追问**：
 
 - **Q: forward fill 的窗口函数解法？** A: `LAST_VALUE(value IGNORE NULLS) OVER(PARTITION BY id ORDER BY date)` —— `IGNORE NULLS` 让窗口跳过 NULL 值取最近一个非 NULL。但各引擎支持差异大：Oracle、Snowflake 支持 `IGNORE NULLS`；Hive 的 `LAST_VALUE` **不忽略 NULL**，需用 `CASE + MAX` 技巧或递归 CTE 替代。面试中答出"标准写法 + 引擎差异 + 替代方案"即可。
@@ -984,31 +998,32 @@ FROM status_log;
 
 ## 组6 关联应用
 
----
-
 ### Q12. 每一门课大于60分的学生的所有科目成绩 `★★★☆☆` `子查询` `join` `关联`
 
 > 来源：项目题号 `06_01`　表：`student`、`sc`、`class`
 
 **表结构：**
 
-| student (id INTEGER, student_name TEXT) | | |
-|---|---|---|
-| id | student_name | |
-| 1 | 张三 | |
-| 5 | 钱七 | |
+**student**
 
-| sc (sid INTEGER, cid INTEGER, score REAL) | | |
+| id (INTEGER) | student_name (TEXT) |
+|---|---|
+| 1 | 张三 |
+| 5 | 钱七 |
+
+**sc**
+
+| sid (INTEGER) | cid (INTEGER) | score (REAL) |
 |---|---|---|
-| sid | cid | score |
 | 1 | 1 | 88.0 |
 | 5 | 3 | 72.0 |
 
-| class (id INTEGER, class_name TEXT) | | |
-|---|---|---|
-| id | class_name | |
-| 1 | 语文 | |
-| 3 | 英语 | |
+**class**
+
+| id (INTEGER) | class_name (TEXT) |
+|---|---|
+| 1 | 语文 |
+| 3 | 英语 |
 
 查询「所有科目都大于 60 分」的学生的全部成绩记录。
 
@@ -1049,7 +1064,7 @@ WHERE s.id IN (
 );
 ```
 
-**NOT IN 的 NULL 陷阱**：如果子查询 `SELECT sid FROM sc WHERE score <= 60` 返回的 sid 集合中包含 NULL，则 `NOT IN` 整体返回空集——因为 `x NOT IN (a, NULL, b)` 等价于 `x <> a AND x <> NULL AND x <> b`，而 `x <> NULL` 恒为 UNKNOWN，整个 AND 链结果为 UNKNOWN，WHERE 过滤掉所有行。安全替代写法用 `NOT EXISTS`：
+**NOT IN 的 NULL 陷阱**：如果子查询 `SELECT sid FROM sc WHERE score <= 60` 返回的 sid 集合中包含 NULL，则 `NOT IN` 整体返回空集——因为 `x NOT IN (a, NULL, b)` 等价于 `x <> a AND x <> NULL AND x <> b`，而 `x <> NULL` 恒为 UNKNOWN，整个 AND 链结果恒不为 TRUE（某比较为 FALSE 时整链为 FALSE，某比较为 UNKNOWN 时整链为 UNKNOWN），WHERE 过滤掉所有行。安全替代写法用 `NOT EXISTS`：
 
 ```sql
 SELECT t0.student_name, t2.class_name, t1.score
@@ -1064,7 +1079,7 @@ WHERE NOT EXISTS (
 
 **5. 面试追问**：
 
-- **Q: NOT IN 子查询里有 NULL 会怎样？** A: 返回空集。`NOT IN` 底层展开为 `<> AND <> AND ...`，只要集合中有 NULL，就会产生一个 `<> NULL` 恒为 UNKNOWN 的条件，导致整个 AND 表达式为 UNKNOWN，WHERE 过滤掉所有行。改用 `NOT EXISTS` 或 `NOT IN (SELECT ... WHERE col IS NOT NULL)` 可规避。
+- **Q: NOT IN 子查询里有 NULL 会怎样？** A: 返回空集。`NOT IN` 底层展开为 `<> AND <> AND ...`，只要集合中有 NULL，就会产生一个 `<> NULL` 恒为 UNKNOWN 的条件，导致整个 AND 表达式恒不为 TRUE（WHERE 只保留 TRUE 的行），所有行被过滤。改用 `NOT EXISTS` 或 `NOT IN (SELECT ... WHERE col IS NOT NULL)` 可规避。
 - **Q: "存在一门 >60"和"所有科目 >60"的 SQL 写法差异？** A: "存在"直接用 `WHERE sid IN (SELECT sid FROM sc WHERE score > 60)`；"所有"需要双重否定——`NOT IN (SELECT sid FROM sc WHERE score <= 60)` 或聚合解法 `GROUP BY sid HAVING MIN(score) > 60`。前者是存在量词，后者是全称量词，SQL 处理方式完全不同。
 
 </details>
@@ -1077,12 +1092,13 @@ WHERE NOT EXISTS (
 
 **表结构：**
 
-| fans (from_user TEXT, to_user TEXT) | | |
-|---|---|---|
-| from_user | to_user | |
-| alice | bob | |
-| bob | alice | |
-| alice | charlie | |
+**fans**
+
+| from_user (TEXT) | to_user (TEXT) |
+|---|---|
+| alice | bob |
+| bob | alice |
+| alice | charlie |
 
 在关注关系表 `fans(from_user, to_user)` 中，找出相互关注的用户对。
 
@@ -1120,9 +1136,9 @@ HAVING COUNT(*) >= 2;
 
 **千亿级数据优化（吸收 06_03）**：当数据量达到千亿级别时，普通 JOIN 会触发全量 shuffle（数据在节点间重分布），代价极高。核心优化策略：
 
-1. **Map-Side Join（小表广播）**：如果其中一张表足够小，将其广播到所有 Map 节点内存中，在 Map 阶段直接完成连接，完全避免 Shuffle。Hive 中用 `/*+ STREAMTABLE */` 提示或设置 `hive.auto.convert.join=true`。
+1. **Map-Side Join（小表广播 / MapJoin）**：如果其中一张表足够小，将其广播到所有 Map 节点内存中，在 Map 阶段直接完成连接，完全避免 Shuffle。Hive 中用 `/*+ MAPJOIN(小表别名) */` 提示或设置 `hive.auto.convert.join=true`（自动将小表转为 MapJoin）。
 2. **分桶表（Bucket）**：按用户 ID 对两张表做相同数量的分桶（CLUSTERED BY user_id INTO N BUCKETS），保证相同键的数据落在同一节点。JOIN 时只做同桶连接，数据量降为原来的 1/N。
-3. **Bloom Filter 预过滤**：对一张表的键构建 Bloom Filter，先过滤另一张表中"不可能匹配"的行，大幅减少参与 JOIN 的数据量。Hive 中用 `/*+ BLOOM_FILTER */` 或 `set hive.bloom.filter.enabled=true`。
+3. **Bloom Filter 预过滤**：对一张表的键构建 Bloom Filter，先过滤另一张表中"不可能匹配"的行，大幅减少参与 JOIN 的数据量。部分引擎（如 Spark）内置 Bloom Filter Join 优化；Hive 中可通过在 ETL 层预过滤不可能相互关注的键来近似实现（如先按各自活跃度做内层过滤，缩小 JOIN 输入规模）。
 4. **核心原则**：避免全量 Shuffle JOIN。Shuffle 是分布式计算中最昂贵的操作（全量数据网络传输 + 磁盘写），优先用上述手段将 JOIN 下推到 Map 端或缩小数据规模。
 
 **5. 面试追问**：
@@ -1237,7 +1253,7 @@ LATERAL VIEW EXPLODE(SPLIT(tags, ',')) t AS tag;
 **3. 关键解析**：
 
 - **`SPLIT(tags, ',')`**：将逗号分隔的字符串拆成 Hive 数组，如 `'a,b,c'` → `['a','b','c']`。
-- **`EXPLODE(arr)`**：表生成函数（UDTF），把数组的每个元素输出为一行。但它不能直接出现在 SELECT 列表中，必须配合 `LATERAL VIEW`。
+- **`EXPLODE(arr)`**：表生成函数（UDTF），把数组的每个元素输出为一行。Hive 中 explode 与其他列共存时不能直接出现在 SELECT 列表（需 lateral view；SELECT 仅含单个 explode 时可以）。
 - **`LATERAL VIEW ... t AS tag`**：虚拟表别名 `t`，将 explode 的输出命名为 `tag` 列，使其可以像普通列一样引用。
 
 **4. 知识点延伸**：
@@ -1301,7 +1317,7 @@ GROUP BY user_id;
 
 **3. 关键解析**：
 
-- **`COLLECT_LIST(tag)`**：将同一 `user_id` 下的所有 `tag` 收集成一个 Hive 数组，保留重复值和原始顺序。
+- **`COLLECT_LIST(tag)`**：将同一 `user_id` 下的所有 `tag` 收集成一个 Hive 数组，保留重复值。实践中通常保留输入顺序，但非语义保证。
 - **`CONCAT_WS(',', arr)`**：用逗号作为分隔符将数组元素拼接为字符串。`WS` = With Separator。遇 NULL 元素自动跳过（不会导致整个结果变 NULL）。
 
 **4. 知识点延伸**：
@@ -1346,12 +1362,12 @@ SELECT date,
        substr(date, 1, 4)                                        AS yr,
        -- 月份
        substr(date, 6, 2)                                        AS mm,
-       -- 季度：yyyyQn，公式 (month-1)/3 + 1
+       -- 季度：yyyyQn，公式 (month-1) div 3 + 1
        concat(substr(date,1,4), 'Q',
-              cast((cast(substr(date,6,2) as int)-1)/3 + 1 as string)) AS qtr,
-       -- 半年度：yyyyHn，公式 (month-1)/6 + 1
+              cast((cast(substr(date,6,2) as int)-1) div 3 + 1 as string)) AS qtr,
+       -- 半年度：yyyyHn，公式 (month-1) div 6 + 1
        concat(substr(date,1,4), 'H',
-              cast((cast(substr(date,6,2) as int)-1)/6 + 1 as string)) AS half,
+              cast((cast(substr(date,6,2) as int)-1) div 6 + 1 as string)) AS half,
        -- 年月：yyyy-MM
        substr(date, 1, 7)                                        AS ytm
 FROM date_table;
@@ -1362,17 +1378,19 @@ FROM date_table;
 -- 最近60天 ：WHERE date >= date_sub(current_date, 60)
 -- 最近90天 ：WHERE date >= date_sub(current_date, 90)
 -- 最近180天：WHERE date >= date_sub(current_date, 180)
+
+-- 注意：Hive 的 / 恒返回 double，整除必须用 div（SQLite 的 / 对整数即整除，原公式在 SQLite 下成立）
 ```
 
 **3. 关键解析**：
 
-- **季度公式 `(m-1)/3 + 1`**：这是一个整除分桶公式。1-3 月 → `(0,1,2)/3 + 1` = `Q1`；4-6 月 → `(3,4,5)/3 + 1` = `Q2`；以此类推。先减 1 是为了让 1-3 月从 0 开始整除，保证每 3 个月落进同一个桶。`cast(... as string)` 是 Hive 口径（SQLite 用 `CAST(... AS TEXT)`）。
-- **半年度公式 `(m-1)/6 + 1`**：同理，每 6 个月一个桶。1-6 月 → `H1`，7-12 月 → `H2`。
+- **季度公式 `(m-1) div 3 + 1`**：这是一个整除分桶公式。1-3 月 → `(0,1,2) div 3 + 1` = `Q1`；4-6 月 → `(3,4,5) div 3 + 1` = `Q2`；以此类推。先减 1 是为了让 1-3 月从 0 开始整除，保证每 3 个月落进同一个桶。`cast(... as string)` 是 Hive 口径（SQLite 用 `CAST(... AS TEXT)`）。**Hive 中整除必须用 `div`，`/` 恒返回 double**（如 3 月：`(3-1)/3+1 = 1.666...`，结果错误）。
+- **半年度公式 `(m-1) div 6 + 1`**：同理，每 6 个月一个桶。1-6 月 → `H1`，7-12 月 → `H2`。同样必须用 `div`。
 - **year 写法**：`substr(date, 1, 4)` 即可，详见 1.4 速查表。
 
 **4. 知识点延伸**：
 
-- **季度公式的推导（吸收 11_02）**：关键在于 `(month-1)/3` 这一步——它是整除分桶的标准写法。将连续值映射到离散桶号时，先减去起始偏移（`-1`），再除以桶宽（`/3`），最后加起始桶号（`+1`）。这个模式可以推广到任意等宽分桶场景，如：将 1-100 分成 10 桶用 `(val-1)/10 + 1`。
+- **季度公式的推导（吸收 11_02）**：关键在于 `(month-1) div 3` 这一步——它是整除分桶的标准写法。将连续值映射到离散桶号时，先减去起始偏移（`-1`），再除以桶宽（`div 3`），最后加起始桶号（`+1`）。这个模式可以推广到任意等宽分桶场景，如：将 1-100 分成 10 桶用 `(val-1) div 10 + 1`。
 - **year 写法交叉引用 1.4 速查表**：年份提取 `substr(date, 1, 4)` 在 1.4 节已有覆盖，此处不再赘述。
 - **Hive vs SQLite 口径差异**：Hive 中整数转字符串用 `cast(col as string)`，SQLite 用 `CAST(col AS TEXT)`。功能等价，只是方言关键字不同。
 
@@ -1435,6 +1453,7 @@ WHERE trim(raw_item) != '';
 - **`get_json_object(data, '$.name')`**：按 JSONPath 语法提取 JSON 字符串中的标量值。`$.name` 取顶层 key，`$.a.b[0].c` 取嵌套路径。
 - **数组展开的两步处理**：`get_json_object(data, '$.items')` 返回的是 JSON 字符串 `'["a","b"]'`，不是 Hive 数组。需要先用 `regexp_replace` 去掉方括号和引号，再用 `SPLIT` 按 `,` 拆分，最后 `EXPLODE` 展开为多行。
 - **`regexp_replace` 的正则**：`[\\[\\]"\\s]` 匹配方括号、双引号和空白，统一替换为逗号（分隔符），便于后续 `SPLIT`。
+- **局限性**：此 regexp_replace + split 方案仅适合无逗号的简单字符串数组。若数组元素本身含逗号（如 `'["hello,world","foo"]'`），split 会在错误位置截断。生产环境建议用 `json_tuple` 或复杂类型（`ARRAY<STRING>`）落地，避免正则解析 JSON 的脆弱性。
 
 **4. 知识点延伸**：
 
@@ -1535,7 +1554,7 @@ WHERE LEAST(lmax, rmax) > height;
 **5. 面试追问**：
 
 - **Q: 为什么两端柱子不接水？** A: `LEAST(lmax, rmax)` 中必有一侧是自身高度（最左端 rmax 包含自身、最右端 lmax 包含自身），差值一定为 0，被 `WHERE LEAST(lmax, rmax) > height` 过滤掉。
-- **Q: Hive 里多参数取最小值用哪个函数？** A: `LEAST(a, b, ...)`。SQLite 中部分引擎用 `MIN(a, b, ...)`——这是方言差异的常见坑点。注意 `MIN()` 在多数 SQL 中是聚合函数，但 SQLite 允许它做标量多参取小，Hive/Spark 则严格区分 `LEAST()`（标量）和 `MIN()`（聚合）。
+- **Q: Hive 里多参数取最小值用哪个函数？** A: `LEAST(a, b, ...)`。SQLite（及 MySQL 等部分引擎）多参取小用 `MIN(a, b, ...)`——这是方言差异的常见坑点。注意 `MIN()` 在多数 SQL 中是聚合函数，但 SQLite 允许它做标量多参取小，Hive/Spark 则严格区分 `LEAST()`（标量）和 `MIN()`（聚合）。
 
 > 📌 SQLite 等价写法：
 > ```sql
@@ -1596,7 +1615,7 @@ WHERE b.time = (SELECT MIN(time) FROM race_result WHERE time < a.time);
 
 - **`b.time < a.time`**：非等值关联条件，匹配所有 time 比当前马小的记录——即所有更快的马。
 - **`WHERE b.time = (SELECT MIN(time) FROM race_result WHERE time < a.time)`**：在所有更快马中，取 time 最小的（即最接近的、紧邻的更快者），从笛卡尔结果中筛选出唯一一行。
-- **`LEFT JOIN`**：保证最快的马（没有比它更快的）也能出现在结果中，其 faster_horse 为 NULL。
+- **`LEFT JOIN` + WHERE 退化为 INNER JOIN**：虽然使用了 LEFT JOIN，但 `WHERE b.time = (子查询返回 NULL)` 中 `NULL = NULL` 恒为 UNKNOWN（非 TRUE），最快的马（无更快者，子查询返回 NULL）实际被 WHERE 过滤掉——LEFT JOIN 在此退化为 INNER JOIN 效果。若要保留最快的马，需将条件挪进 ON 子句（`ON b.time < a.time AND b.time = (SELECT MIN(...))`），或更优雅地使用下方 LAG 解法。这个"LEFT JOIN + WHERE 退化"本身是高频面试考点。
 
 **4. 知识点延伸**：
 
@@ -1616,6 +1635,7 @@ FROM race_result;
 
 - **Q: 非等值 JOIN 有什么问题？** A: 无法按 join key 做 hash 分桶，只能走 nested loop（嵌套循环），时间复杂度 O(n^2)。而且会产生数据放大（每行匹配行数不固定），结果集可能远大于原表。生产环境大数据量下基本禁用。
 - **Q: 一条 SQL 顺手解决的话怎么写？** A: `LAG(horse) OVER (ORDER BY time)` 一步到位——按 time 升序排列后，LAG 取前一行即紧邻更快者。比非等值 JOIN + 子查询更简洁高效。
+- **Q: 这里的 LEFT JOIN 真的保留了最快的马吗？** A: 并没有。WHERE 中 `NULL = NULL` 恒为 UNKNOWN（非 TRUE），最快的马（子查询返回 NULL）被 WHERE 过滤——LEFT JOIN 退化为 INNER JOIN。这是经典的面试陷阱：LEFT JOIN 保左表全量仅当 WHERE 不含右表列的 NULL 过滤条件时才成立。
 
 </details>
 
@@ -1684,7 +1704,7 @@ CREATE TABLE attendance (
 **4. 知识点延伸**：
 
 - **拉链表处理员工维度缓慢变化（SCD）**：当员工调部门或改状态时，维度表需要保留历史。拉链表通过 `start_date` / `end_date` 两个时间字段实现：新增一条记录写入新值和 start_date，旧记录的 end_date 设为新记录生效日期的前一天。查询时加 `WHERE start_date <= 当前日期 AND end_date > 当前日期` 即取到当前有效记录。
-- **emp_id 冗余在事实表的原因**：`emp_id` 作为维度代理键（surrogate key）冗余存放在事实表中，是数仓的标准做法。这样事实表查询时可直接 JOIN 维度表获取详细信息，避免在事实表中冗余大量描述性字段（如姓名、部门名），既控制事实表宽度，又保证查询性能。
+- **emp_id 冗余在事实表的原因**：本题中 `emp_id` 是业务自然键，数仓标准做法是事实表放维度的代理键（另行生成的 surrogate key）。本题为简化直接用 emp_id 关联，实际生产中事实表冗余代理键而非自然键，查询时通过代理键 JOIN 维度表获取详细信息，既控制事实表宽度，又保证查询性能。
 
 **5. 面试追问**：
 
@@ -1692,5 +1712,3 @@ CREATE TABLE attendance (
 - **Q: 员工调部门的历史怎么保留？** A: 用拉链表（start_date / end_date）。每次部门变动插入一条新记录，旧记录关闭 end_date。查询时用 `WHERE start_date <= ? AND end_date > ?` 取当前有效行。这与 Q3 的区间分段思想一脉相承——用起止时间区间来表示一个状态的生效周期。
 
 </details>
-
----

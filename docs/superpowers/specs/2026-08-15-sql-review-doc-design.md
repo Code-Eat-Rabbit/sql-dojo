@@ -112,8 +112,8 @@ sql_practice 项目内有 14 个专题、44 道 SQL 题目（7 道为 stub、37 
 ## 4. 实现要点
 
 - 数据来源：`data_builder/manifest.py` 中对应 Problem 的 description、reference_sql、hints、tables 字段；表结构参考各 `databases/*.db` 与 `data_builder/builders/*.py`
-- 22 道题与速查表内容较多，实现时分批写入（先 Part 1，再按组分批写 Part 2），避免单次输出截断
-- 文档中的题号（Q1-Q22）与项目题目 id（如 01_01）同时标注，方便回项目重做
+- 21 道题与速查表内容较多，实现时分批写入（先 Part 1，再按组分批写 Part 2），避免单次输出截断
+- 文档中的题号（Q1-Q21）与项目题目 id（如 01_01）同时标注，方便回项目重做
 - stub 题目（12_xx、14_02、14_04）不收录
 
 ## 5. 验收标准
