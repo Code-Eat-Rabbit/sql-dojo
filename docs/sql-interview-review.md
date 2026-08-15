@@ -861,4 +861,125 @@ HAVING COUNT(DISTINCT order_id) >= 2;
 
 ---
 
+## 组5 区间与 NULL
+
+### Q10. 区间交集 — 合并区间 `★★★★` `区间` `合并`
+
+> 来源：项目题号 `05_01`　表：`raw_intervals`
+
+| start | end |
+|-------|-----|
+| 1     | 3   |
+| 2     | 5   |
+| 8     | 10  |
+
+给定多个区间（start, end），合并所有有交集的区间。
+
+*提示：用 max(end) over() 滚动获取之前的最大 end，start > 之前的 max_end 则开启新区间*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：经典区间合并——按 start 排序后，用滚动最大值判断当前区间是否与前面所有已处理区间重叠，不重叠则开启新组，最终按组取 min(start) 和 max(end)。
+
+**2. 参考 SQL（Hive 方言）**：
+
+```sql
+WITH intervals AS (
+    SELECT start, end,
+           MAX(end) OVER (ORDER BY start ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS max_end_so_far,
+           CASE WHEN start > MAX(end) OVER (ORDER BY start ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)
+                THEN 1 ELSE 0 END AS new_group
+    FROM raw_intervals
+),
+groups AS (
+    SELECT start, end, SUM(new_group) OVER (ORDER BY start) AS group_id
+    FROM intervals
+)
+SELECT MIN(start) AS merged_start, MAX(end) AS merged_end
+FROM groups
+GROUP BY group_id;
+```
+
+**3. 关键解析**：
+
+- **为什么用 `MAX(end) OVER(...前置行)` 而不是 `LAG(end)`**：`LAG(end)` 只看上一行的 end，但如果前面的区间很长（比如第 1 行是 [1,10]，第 3 行是 [5,6]），只看上一行会误判。滚动最大值 `MAX(end)` 能覆盖之前所有行的最大端点，确保不遗漏任何重叠。
+- **帧 `ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING`**：从第一行到当前行的前一行，**排除当前行自身**。因为当前行的 end 不应参与"之前区间"的判断——我们要比较的是当前 start 与**之前所有区间**的 max end。
+- **`SUM(new_group) OVER(ORDER BY start)` 累加组号**：每个 `new_group=1` 的位置就是新组的起点，累加后同一组的行共享相同的 `group_id`，外层按组聚合即可得到合并后的区间。
+
+**4. 知识点延伸**：
+
+**与 Q3 延伸（01_06 lag 断点法）的对比**：Q3 延伸中用 `LAG(time) = session_end` 判断会话断点，前提是数据**无重叠**——每条记录只与前一条比较。而本题涉及**有重叠、甚至嵌套**的区间，`LAG` 只看紧邻上一行会漏掉更早的长区间，必须用滚动 `MAX(end)` 覆盖全部前置行。结论：无重叠场景 `LAG` 够用；有重叠或嵌套必须滚动 `MAX`。
+
+**5. 面试追问**：
+
+- **Q: 区间是日期不是数字怎么办？** A: 用 `DATEDIFF` 转为数值差比较，或直接比较日期大小（日期类型天然支持 `>`/`<`），窗口函数的套路完全不变，只是数据类型从整数换成日期。
+- **Q: 首行的 max_end_so_far 是 NULL，CASE 怎么走？** A: 首行的帧 `ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING` 为空集，`MAX(end)` 返回 NULL。此时 `start > NULL` 的结果是 NULL（UNKNOWN），SQL 的 CASE 将 NULL 视为非 TRUE，走 ELSE 分支返回 0。因此首行 `new_group=0`，累加后 `group_id=0`，天然归入第一组——行为正确。这是 SQL 三值逻辑（TRUE/FALSE/UNKNOWN）的一个隐式依赖，面试中讲清楚"UNKNOWN → ELSE"这个走向即可。
+
+</details>
+
+---
+
+### Q11. 填补缺失值 `★★★` `缺失值` `lag` `填充`
+
+> 来源：项目题号 `09_02`　表：`data_table`
+
+| id | date       | value |
+|----|------------|-------|
+| 1  | 2024-01-01 | 10    |
+| 1  | 2024-01-02 | NULL  |
+| 1  | 2024-01-03 | NULL  |
+| 1  | 2024-01-04 | 20    |
+
+用上一个非空值填充缺失值（forward fill）。
+
+*提示：用子查询查最近的非空值，或递归 CTE 逐行填充*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：对每一行，如果当前 value 为 NULL，就去同一 id 中找日期早于当前行的最近一条非 NULL 记录，用它的 value 填充——相关子查询天然表达"找最近非空前值"的语义。
+
+**2. 参考 SQL（Hive 方言）**：
+
+```sql
+-- 用相关子查询填充
+WITH filled AS (
+    SELECT id, date, value,
+           CASE WHEN value IS NOT NULL THEN value
+                ELSE (SELECT t2.value FROM data_table t2
+                      WHERE t2.id = t1.id AND t2.date < t1.date AND t2.value IS NOT NULL
+                      ORDER BY t2.date DESC LIMIT 1)
+           END AS filled_value
+    FROM data_table t1
+)
+SELECT * FROM filled;
+```
+
+**3. 关键解析**：
+
+- 相关子查询对每一行执行一次"在同一 id 内按日期倒序找最近非 NULL 值"的查询，`LIMIT 1` 只取最近的一条。
+- 性能警告：相关子查询的时间复杂度为 O(n²)——外层 n 行，每行触发一次子查询扫描。数据量大时需要考虑窗口函数方案或递归 CTE 替代。
+
+**4. 知识点延伸**：
+
+**状态标记（吸收 09_01）**：给定状态变更日志，用 `LEAD` 给每个状态区间补上终点。
+
+```sql
+SELECT id, status, start_time,
+       LEAD(start_time) OVER (PARTITION BY id ORDER BY start_time) AS end_time
+FROM status_log;
+```
+
+- `LEAD(start_time)` 取同一 id 下按 start_time 排序的下一行时间，作为当前状态的结束时刻。最后一个状态的 end_time 为 NULL（表示持续到当前）。
+
+> Hive 备注写法：子查询内 `LIMIT` 在部分 Hive 版本中不支持，可改用 `ROW_NUMBER()` 取 `rn=1` 的行：`SELECT value FROM (SELECT value, ROW_NUMBER() OVER(ORDER BY date DESC) AS rn FROM ... WHERE value IS NOT NULL) t WHERE rn = 1`。
+
+**5. 面试追问**：
+
+- **Q: forward fill 的窗口函数解法？** A: `LAST_VALUE(value IGNORE NULLS) OVER(PARTITION BY id ORDER BY date)` —— `IGNORE NULLS` 让窗口跳过 NULL 值取最近一个非 NULL。但各引擎支持差异大：Oracle、Snowflake 支持 `IGNORE NULLS`；Hive 的 `LAST_VALUE` **不忽略 NULL**，需用 `CASE + MAX` 技巧或递归 CTE 替代。面试中答出"标准写法 + 引擎差异 + 替代方案"即可。
+- **Q: 相关子查询为什么慢？** A: 相关子查询对外层每一行都独立执行一次内层查询，无法利用批量优化（索引嵌套循环或哈希连接），复杂度 O(n²)。窗口函数方案一次扫描完成，复杂度 O(n)，但需引擎支持 `IGNORE NULLS` 等特性。实际选择取决于数据规模和引擎能力。
+
+</details>
+
+---
+
 <!-- APPEND -->
