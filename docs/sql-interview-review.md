@@ -1134,4 +1134,335 @@ HAVING COUNT(*) >= 2;
 
 ---
 
+## 组7 留存计算
+
+### Q14. 七日留存计算 `★★★☆☆` `留存` `retention`
+
+> 来源：项目题号 `07_01`　表：`user_active`
+
+| user_id | date       |
+|---------|------------|
+| 1       | 2024-01-01 |
+| 1       | 2024-01-08 |
+| 2       | 2024-01-01 |
+
+给定用户每日活跃表，计算七日留存率（Day0 活跃的用户在 Day7 仍然活跃的比例）。
+
+*提示：先找每个用户的首次活跃日期，再 left join 7 天后的活跃记录，计算比例*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：留存计算的套路——先确定分母（首活用户），再关联留存日的活跃记录，最后用 distinct count 防止重复活跃灌水比例。
+
+**2. 参考 SQL（Hive 方言）**：
+
+```sql
+-- 步骤1：找出每个用户的首次活跃日期（分母）
+-- 步骤2：left join 第7天活跃记录（保分母，未留存用户不会丢失）
+-- 步骤3：count distinct 计算留存率
+SELECT a.first_date,
+       COUNT(DISTINCT a.user_id) AS day0_users,
+       COUNT(DISTINCT b.user_id) AS day7_users,
+       ROUND(COUNT(DISTINCT b.user_id) * 100.0 / COUNT(DISTINCT a.user_id), 2) AS retention_pct
+FROM (
+    SELECT user_id, MIN(date) AS first_date
+    FROM user_active
+    GROUP BY user_id
+) a
+LEFT JOIN user_active b
+  ON a.user_id = b.user_id
+  AND b.date = date_add(a.first_date, 7)
+GROUP BY a.first_date;
+```
+
+**3. 关键解析**：
+
+- **`MIN(date) 定分母**：留存率的分母是"首次活跃"用户，而非所有活跃用户。用 `MIN(date)` 取每个用户最早出现的日期，确保只看新用户的留存表现。
+- **`LEFT JOIN` 保分母**：如果用 `INNER JOIN`，第 7 天没有活跃的用户会被直接丢弃，分母变小、留存率虚高。`LEFT JOIN` 保留所有首活用户，未留存用户的 `b.user_id` 为 NULL，`COUNT(DISTINCT b.user_id)` 自动忽略 NULL。
+- **`COUNT(DISTINCT)` 防灌水**：同一用户在第 7 天可能活跃多次（如多次打开 App），`COUNT(DISTINCT b.user_id)` 保证每个人只算一次。
+
+**4. 知识点延伸**：
+
+**留存家族口径表**：不同留存周期的计算逻辑完全一致，只需修改 `date_add` 的偏移天数：
+
+| 留存类型   | 偏移天数 | date_add 参数  |
+|-----------|---------|----------------|
+| 次日留存   | 1       | `date_add(first_date, 1)`   |
+| 3 日留存   | 3       | `date_add(first_date, 3)`   |
+| 7 日留存   | 7       | `date_add(first_date, 7)`   |
+| 30 日留存  | 30      | `date_add(first_date, 30)`  |
+
+**新增用户口径 vs 活跃用户口径**：本题属于"新增用户口径"——分母限定为用户的首次活跃（`MIN(date)`）。如果是"活跃用户口径"（如：本周活跃的用户下周是否还活跃），分母则是某一周期内的所有活跃用户，不限定首次。两种口径的业务含义不同，面试时要问清楚。
+
+**5. 面试追问**：
+
+- **Q: 为什么用 LEFT JOIN 而不是 INNER JOIN？** A: 分母必须完整。INNER JOIN 会把第 7 天未活跃的用户从结果中剔除，导致分母只包含留存用户，算出的留存率恒为 100%。LEFT JOIN 保留所有首活用户，未留存的 `b.user_id` 为 NULL，正确反映真实留存率。
+- **Q: 用户第 7 天活跃多次算几次？** A: `COUNT(DISTINCT b.user_id)` 保证每个用户只算一次。如果用 `COUNT(b.user_id)`（不加 DISTINCT），同一天多次活跃的用户会被重复计算，虚高留存人数。
+
+> 📌 SQLite 等价写法：将 `date_add(a.first_date, 7)` 替换为 `DATE(a.first_date, '+7 days')`，其余逻辑完全相同。
+
+</details>
+
+---
+
+## 组8 数据展开收缩与日期/JSON
+
+### Q15. 数据展开（行转列） `★★☆☆☆` `展开` `行转列`
+
+> 来源：项目题号 `08_01`　表：`user_tags`
+
+| user_id | tags  |
+|---------|-------|
+| 1       | a,b,c |
+| 2       | x,y   |
+
+给定一个用户和其标签列表（逗号分隔），把标签展开为多行。
+
+*提示：用 lateral view explode 把逗号分隔的字符串炸开成多行*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：行转列的核心是将一个单元格内的多值拆成多行。Hive 中直接用 `SPLIT` + `EXPLODE` 一步到位，`LATERAL VIEW` 负责将炸开的结果与原表行关联。
+
+**2. 参考 SQL（Hive 方言）**：
+
+```sql
+-- split 按逗号拆字符串为数组，explode 将数组每个元素炸成一行
+-- lateral view 将炸出的行与原表 user_id 关联
+SELECT user_id, tag
+FROM user_tags
+LATERAL VIEW EXPLODE(SPLIT(tags, ',')) t AS tag;
+```
+
+**3. 关键解析**：
+
+- **`SPLIT(tags, ',')`**：将逗号分隔的字符串拆成 Hive 数组，如 `'a,b,c'` → `['a','b','c']`。
+- **`EXPLODE(arr)`**：表生成函数（UDTF），把数组的每个元素输出为一行。但它不能直接出现在 SELECT 列表中，必须配合 `LATERAL VIEW`。
+- **`LATERAL VIEW ... t AS tag`**：虚拟表别名 `t`，将 explode 的输出命名为 `tag` 列，使其可以像普通列一样引用。
+
+**4. 知识点延伸**：
+
+- **`posexplode`**：带序号的展开，输出两列 `(pos, val)`，pos 从 0 开始。适用于需要保留原始顺序或位置信息的场景。
+- **`LATERAL VIEW OUTER`**：如果数组为空（如 tags 为空字符串），普通 `LATERAL VIEW` 会丢弃该行，`LATERAL VIEW OUTER` 则保留该行（explode 输出 NULL）。
+- **空字符串过滤**：如果原始 tags 中存在空串（如 `'a,,c'`），split 后会产生空元素。用 `WHERE tag != ''` 或在 split 前用 `regexp_replace(tags, ',+', ',')` 合并连续逗号来清洗。
+
+**5. 面试追问**：
+
+- **Q: explode 和 lateral view 的关系？** A: `explode` 是表生成函数（UDTF），输入一行输出多行，但不能直接与原表列共存。`LATERAL VIEW` 是连接语法，把 UDTF 的输出虚拟成一张表，与主表的每一行做类 CROSS JOIN，使 explode 结果可以和原表列一起查询。
+- **Q: tags 中有空串元素怎么处理？** A: split 后产生的空串可以用 `WHERE tag != ''` 过滤；或者在 split 前清洗数据，用 `regexp_replace(tags, ',+', ',')` 合并连续逗号、`trim` 去首尾逗号。
+
+> 📌 SQLite 等价写法：SQLite 没有 explode，需用递归 CTE 逐字符解析：
+> ```sql
+> WITH RECURSIVE split(user_id, tag, rest) AS (
+>     SELECT user_id, '', tags || ','
+>     FROM user_tags
+>     UNION ALL
+>     SELECT user_id,
+>            SUBSTR(rest, 1, INSTR(rest, ',') - 1),
+>            SUBSTR(rest, INSTR(rest, ',') + 1)
+>     FROM split
+>     WHERE rest != ''
+> )
+> SELECT user_id, tag FROM split WHERE tag != '';
+> ```
+
+</details>
+
+---
+
+### Q16. 数据收缩（列转行） `★★☆☆☆` `收缩` `列转行` `group_concat`
+
+> 来源：项目题号 `08_02`　表：`user_tag_rows`
+
+| user_id | tag |
+|---------|-----|
+| 1       | a   |
+| 1       | b   |
+| 1       | c   |
+| 2       | x   |
+
+把多行数据按用户合并为一行（聚合标签）。
+
+*提示：用字符串聚合函数将同一 user_id 的多行 tag 拼接为一个逗号分隔字符串*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：列转行是 Q15 行转列的逆操作——用聚合函数将多行值拼成一个字符串。Hive 用 `COLLECT_LIST` 收集为数组再 `CONCAT_WS` 拼接。
+
+**2. 参考 SQL（Hive 方言）**：
+
+```sql
+-- collect_list 收集同一组内的所有 tag 为数组
+-- concat_ws 用逗号将数组元素拼接成字符串
+SELECT user_id, CONCAT_WS(',', COLLECT_LIST(tag)) AS tags
+FROM user_tag_rows
+GROUP BY user_id;
+```
+
+**3. 关键解析**：
+
+- **`COLLECT_LIST(tag)`**：将同一 `user_id` 下的所有 `tag` 收集成一个 Hive 数组，保留重复值和原始顺序。
+- **`CONCAT_WS(',', arr)`**：用逗号作为分隔符将数组元素拼接为字符串。`WS` = With Separator。遇 NULL 元素自动跳过（不会导致整个结果变 NULL）。
+
+**4. 知识点延伸**：
+
+- **`collect_list` vs `collect_set`**：`collect_list` 保留重复值和插入顺序；`collect_set` 去重但不保序（底层是 HashSet）。需要去重且保序时，用 `sort_array(collect_set(tag))`（先去重再排序）。
+- **聚合内排序 `sort_array`**：`sort_array(collect_list(tag))` 对收集到的数组做字典序排序，可用于保证输出稳定。注意 `sort_array` 是升序，如需降序需加 `reverse()`。
+- **`CONCAT_WS` vs `CONCAT`**：`CONCAT_WS` 遇 NULL 跳过该元素，其余正常拼接；`CONCAT` 只要有一个参数为 NULL，整个结果就变 NULL。聚合场景优先用 `CONCAT_WS`。
+
+**5. 面试追问**：
+
+- **Q: 要去重且保序怎么办？** A: `collect_set` 去重但不保序，`collect_list` 保序但不去重。如果业务要求既去重又保序，可以用 `sort_array(collect_set(tag))`（先去重再排序），但排序是字典序而非原始插入序。严格保序去重需要用窗口函数 `ROW_NUMBER() PARTITION BY tag` 先去重再 `collect_list`。
+- **Q: `concat_ws` 遇 NULL 怎么处理？** A: `concat_ws` 会自动跳过 NULL 元素，只拼接非 NULL 值。而 `concat` 只要有一个入参是 NULL，整个结果就是 NULL。所以在聚合场景中，`concat_ws` 更安全。
+
+> 📌 SQLite 等价写法：`SELECT user_id, GROUP_CONCAT(tag, ',') AS tags FROM user_tag_rows GROUP BY user_id;`
+
+</details>
+
+---
+
+### Q17. 日期格式汇总 `★★☆☆☆` `日期` `汇总`
+
+> 来源：项目题号 `11_03`　表：`date_table`
+
+| date       |
+|------------|
+| 2024-03-15 |
+| 2024-11-20 |
+
+汇总所有日期格式转换的代码：year, mm, quarter, half, ytm, last\*系列。
+
+*提示：记住 substr + 算术的组合模式*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：日期格式转换的核心模式——用 `SUBSTR` 截取年/月部分，再用整除分桶公式计算季度和半年度。不依赖引擎特定函数，纯字符串+算术实现最大兼容性。
+
+**2. 参考 SQL（Hive 方言）**：
+
+```sql
+SELECT date,
+       -- 年份
+       substr(date, 1, 4)                                        AS yr,
+       -- 月份
+       substr(date, 6, 2)                                        AS mm,
+       -- 季度：yyyyQn，公式 (month-1)/3 + 1
+       concat(substr(date,1,4), 'Q',
+              cast((cast(substr(date,6,2) as int)-1)/3 + 1 as string)) AS qtr,
+       -- 半年度：yyyyHn，公式 (month-1)/6 + 1
+       concat(substr(date,1,4), 'H',
+              cast((cast(substr(date,6,2) as int)-1)/6 + 1 as string)) AS half,
+       -- 年月：yyyy-MM
+       substr(date, 1, 7)                                        AS ytm
+FROM date_table;
+
+-- last 系列（滚动窗口）：
+-- 最近12个月：WHERE date >= date_sub(current_date, 365)
+-- 最近30天 ：WHERE date >= date_sub(current_date, 30)
+-- 最近60天 ：WHERE date >= date_sub(current_date, 60)
+-- 最近90天 ：WHERE date >= date_sub(current_date, 90)
+-- 最近180天：WHERE date >= date_sub(current_date, 180)
+```
+
+**3. 关键解析**：
+
+- **季度公式 `(m-1)/3 + 1`**：这是一个整除分桶公式。1-3 月 → `(0,1,2)/3 + 1` = `Q1`；4-6 月 → `(3,4,5)/3 + 1` = `Q2`；以此类推。先减 1 是为了让 1-3 月从 0 开始整除，保证每 3 个月落进同一个桶。`cast(... as string)` 是 Hive 口径（SQLite 用 `CAST(... AS TEXT)`）。
+- **半年度公式 `(m-1)/6 + 1`**：同理，每 6 个月一个桶。1-6 月 → `H1`，7-12 月 → `H2`。
+- **year 写法**：`substr(date, 1, 4)` 即可，详见 1.4 速查表。
+
+**4. 知识点延伸**：
+
+- **季度公式的推导（吸收 11_02）**：关键在于 `(month-1)/3` 这一步——它是整除分桶的标准写法。将连续值映射到离散桶号时，先减去起始偏移（`-1`），再除以桶宽（`/3`），最后加起始桶号（`+1`）。这个模式可以推广到任意等宽分桶场景，如：将 1-100 分成 10 桶用 `(val-1)/10 + 1`。
+- **year 写法交叉引用 1.4 速查表**：年份提取 `substr(date, 1, 4)` 在 1.4 节已有覆盖，此处不再赘述。
+- **Hive vs SQLite 口径差异**：Hive 中整数转字符串用 `cast(col as string)`，SQLite 用 `CAST(col AS TEXT)`。功能等价，只是方言关键字不同。
+
+**5. 面试追问**：
+
+- **Q: 为什么不用内置的 `quarter()` 函数？** A: 各引擎对日期函数的支持差异很大——MySQL/PostgreSQL 有 `QUARTER()`，Hive 有 `QUARTER()`（需要 date 类型），SQLite 完全没有。手写公式 `(m-1)/3 + 1` 是纯算术，不依赖任何引擎特性，最保险。而且面试中考的就是你能否现场推导这个公式。
+- **Q: 滚动 12 个月的边界怎么定？** A: 用日期差（`date_sub(current_date, 365)`）而非月份差。用 365 天而非 12 个月是因为后者在不同引擎中语义不同（有的含当月，有的不含）。口径要和业务方确认：是否包含端点、是否用自然月还是滚动天。另外闰年时 365 天会有微小偏差，大数据场景通常可忽略。
+
+</details>
+
+---
+
+### Q18. JSON 解析系列 `★★★☆☆` `json` `解析`
+
+> 来源：项目题号 `13_01`　表：`json_table`
+
+| id | data                                           |
+|----|------------------------------------------------|
+| 1  | {"name":"tom","age":18,"items":["a","b"]}      |
+| 2  | {"name":"jerry","age":20,"items":["c"]}        |
+
+解析 JSON 字段，提取嵌套键值并展开数组。
+
+*提示：get_json_object 提取字段，lateral view explode 展开数组*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：Hive 解析 JSON 分两步——用 `get_json_object` 按 JSONPath 提取标量字段，用 `get_json_object` 取数组字符串后再 `SPLIT` + `EXPLODE` 展开为数组元素行。
+
+**2. 参考 SQL（Hive 方言）**：
+
+```sql
+-- 提取标量字段
+SELECT id,
+       get_json_object(data, '$.name') AS name,
+       get_json_object(data, '$.age')  AS age
+FROM json_table;
+
+-- 展开 JSON 数组
+-- get_json_object 返回字符串如 '["a","b"]'，
+-- 需 regexp_replace 去掉引号和方括号，再 split + explode
+SELECT id,
+       get_json_object(data, '$.name') AS name,
+       trim(regexp_replace(raw_item, '["\\[\\]]', '')) AS item
+FROM json_table
+LATERAL VIEW EXPLODE(
+    SPLIT(
+        regexp_replace(
+            get_json_object(data, '$.items'),
+            '[\\[\\]"\\s]', ','
+        ),
+        ','
+    )
+) t AS raw_item
+WHERE trim(raw_item) != '';
+```
+
+**3. 关键解析**：
+
+- **`get_json_object(data, '$.name')`**：按 JSONPath 语法提取 JSON 字符串中的标量值。`$.name` 取顶层 key，`$.a.b[0].c` 取嵌套路径。
+- **数组展开的两步处理**：`get_json_object(data, '$.items')` 返回的是 JSON 字符串 `'["a","b"]'`，不是 Hive 数组。需要先用 `regexp_replace` 去掉方括号和引号，再用 `SPLIT` 按 `,` 拆分，最后 `EXPLODE` 展开为多行。
+- **`regexp_replace` 的正则**：`[\\[\\]"\\s]` 匹配方括号、双引号和空白，统一替换为逗号（分隔符），便于后续 `SPLIT`。
+
+**4. 知识点延伸**：
+
+- **`json_tuple` 一次取多字段**：`LATERAL VIEW json_tuple(data, 'name', 'age', 'city') t AS name, age, city` 比多次调用 `get_json_object` 更高效——只解析一次 JSON，而不是每个字段解析一趟。适合平铺提取多个字段。
+- **嵌套路径 `$.a.b[0].c`**：`get_json_object` 支持完整的 JSONPath 语法，可以取任意深度的嵌套值和数组元素。如 `$.items[0]` 取数组第一个元素。
+- **JSON 存表 vs 拆列**：数仓规范中，JSON 通常在 ETL 阶段就落地为独立列（结构化拆列）或复杂类型（`ARRAY<STRING>`、`MAP<STRING,INT>`、`STRUCT`）。查询时直接操作列比每次解析 JSON 高效得多。JSON 进数仓通常只作为临时/脏数据的过渡形态。
+
+**5. 面试追问**：
+
+- **Q: `get_json_object` 和 `json_tuple` 选哪个？** A: 单字段提取或需要取嵌套路径（如 `$.a.b[0]`）时用 `get_json_object`；一次提取多个平铺字段时用 `json_tuple`，只解析一次 JSON 性能更好。两者可以混用。
+- **Q: JSON 数据存表里好还是拆成独立列好？** A: 数仓规范一般落地为独立列或复杂类型（`ARRAY`/`MAP`/`STRUCT`），避免每次查询都做 JSON 解析。JSON 存表适合：schema 不稳定的临时数据、需要保留原始结构的数据。落地到正式表时应在 ETL 阶段拆列。
+
+> 📌 SQLite 等价写法：
+> ```sql
+> -- 提取标量字段
+> SELECT id,
+>        json_extract(data, '$.name') AS name,
+>        json_extract(data, '$.age')  AS age
+> FROM json_table;
+>
+> -- 展开 JSON 数组
+> SELECT id,
+>        json_each.value AS item
+> FROM json_table, JSON_EACH(json_table.data, '$.items');
+> ```
+
+</details>
+
+---
+
 <!-- APPEND -->
