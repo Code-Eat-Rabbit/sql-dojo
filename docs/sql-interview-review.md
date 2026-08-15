@@ -590,4 +590,275 @@ WHERE dr = 2;
 
 </details>
 
+## 组4 累计汇总
+
+### Q7. 统计每个用户累计访问次数 `★★☆☆☆` `sum` `累计` `聚合开窗`
+
+> 来源：项目题号 `04_01`　表：`user_visits`
+
+**表结构：**
+
+| user_id (INTEGER) | month_id (TEXT) | visit_cnt_1m (INTEGER) |
+|---|---|---|
+| 1 | 2024-01 | 30 |
+| 1 | 2024-02 | 25 |
+| 2 | 2024-01 | 15 |
+
+用聚合开窗函数 `sum() over()` 统计每个用户按月累计访问次数。
+
+*提示：sum(col) over(partition by ... order by ...) 实现累计；不加 order by 则是全局总和。*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：经典的「累计求和」套路——`SUM() OVER(PARTITION BY ... ORDER BY ...)` 是聚合开窗函数的核心用法，`ORDER BY` 决定了累计方向，`PARTITION BY` 决定了分组粒度。
+
+**2. 参考 SQL（Hive 方言）**：
+
+```sql
+SELECT user_id, month_id, visit_cnt_1m,
+       SUM(visit_cnt_1m) OVER (PARTITION BY user_id ORDER BY month_id) AS cumulative_visits
+FROM user_visits;
+```
+
+**3. 关键解析**：
+
+- **加 `ORDER BY` = 累计值**：`SUM(col) OVER(PARTITION BY user_id ORDER BY month_id)` 会按 `month_id` 顺序逐行累加，得到每个用户截至当月的累计访问次数。
+- **不加 `ORDER BY` = 组内总量**：去掉 `ORDER BY month_id` 后，`SUM(col) OVER(PARTITION BY user_id)` 计算的是该用户的**全局总和**（所有月份加总），同一用户每行值相同。
+
+```sql
+-- 对照：不加 ORDER BY → 组内总量（每行值相同）
+SELECT user_id, month_id, visit_cnt_1m,
+       SUM(visit_cnt_1m) OVER (PARTITION BY user_id) AS total_visits
+FROM user_visits;
+```
+
+| user_id | month_id | visit_cnt_1m | cumulative_visits（加 ORDER BY） | total_visits（不加 ORDER BY） |
+|---|---|---|---|---|
+| 1 | 2024-01 | 30 | 30 | 55 |
+| 1 | 2024-02 | 25 | 55 | 55 |
+| 1 | 2024-03 | 20 | 75 | 55 |
+
+**4. 知识点延伸**：
+
+**滚动最小值求历史新低（吸收 04_08：历史新低的商品）**
+
+`MIN(price) OVER(PARTITION BY id ORDER BY ds)` 实现滚动最小值，用于判断当天价格是否为历史新低。
+
+> **勘误框**：manifest 原答案（04_08）中 `LAG(price) OVER(...)` 写在 `WHERE` 里是**非法语法**——窗口函数不能出现在 `WHERE` 子句中（SQL 执行顺序：`WHERE` 先于 `SELECT` 中的窗口计算）。正确做法是先在 CTE 中算好 `min_so_far` 与 `prev_price`，再在外层过滤。
+
+```sql
+-- 正确写法：CTE 先算窗口函数，外层再过滤
+WITH marked AS (
+    SELECT id, ds, price,
+           MIN(price) OVER (PARTITION BY id ORDER BY ds) AS min_so_far,
+           LAG(price)  OVER (PARTITION BY id ORDER BY ds) AS prev_price
+    FROM product_price
+)
+SELECT id, ds, price
+FROM marked
+WHERE price = min_so_far        -- 当前价格 = 历史最低
+  AND prev_price IS NOT NULL    -- 排除首日（无历史可比）
+  AND price < prev_price;       -- 严格新低（比前一天还低）
+```
+
+**5. 面试追问**：
+
+- **Q: ROWS 与 RANGE 帧的区别？** A: `ROWS` 按物理行偏移定义帧范围（如 `ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING`），`RANGE` 按排序值的逻辑距离定义（排序值相同的行在同一帧）。默认帧在加 `ORDER BY` 时为 `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`。
+- **Q: 窗口函数能写进 WHERE 吗？** A: 不能。SQL 执行顺序为 `FROM → WHERE → GROUP BY → HAVING → SELECT`，窗口函数在 `SELECT` 阶段计算，`WHERE` 先于窗口函数执行。解决办法：用 CTE 或子查询先把窗口函数算出来，再在外层 `WHERE` 过滤。
+
+</details>
+
+---
+
+### Q8. 同时在线人数 `★★★☆☆` `同时在线` `进出时间` `累加`
+
+> 来源：项目题号 `04_02`　表：`live_log`
+
+**表结构：**
+
+| room_id (INTEGER) | user_id (INTEGER) | login_time (TEXT) | logout_time (TEXT) |
+|---|---|---|---|
+| 101 | 1 | 2021-03-10 08:00:00 | 2021-03-10 09:30:00 |
+| 101 | 2 | 2021-03-10 08:30:00 | 2021-03-10 10:00:00 |
+
+给定用户进入和离开直播间的时间，计算同时在线人数峰值。
+核心技巧：进入 +1，离开 -1，按时间排序累加。
+
+*提示：进入+1，离开-1，按时间排序累加；用 union all 把进出事件合并。*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：经典的「区间转事件流」套路——把用户在线的 `[login_time, logout_time]` 区间拆成两个事件点：进入 = +1，离开 = -1。合并后按时间排序做累计求和，累计值的最大值即为峰值在线人数。核心抽象：把「区间问题」转成「事件流问题」。
+
+**2. 参考 SQL（Hive 方言）**：
+
+```sql
+-- 步骤一：进入+1，离开-1，合并为事件流
+WITH events AS (
+    SELECT room_id, user_id, login_time AS event_time, 1 AS user_type FROM live_log
+    WHERE substr(login_time, 1, 10) = '2021-03-10'
+    UNION ALL
+    SELECT room_id, user_id, logout_time AS event_time, -1 AS user_type FROM live_log
+    WHERE substr(logout_time, 1, 10) = '2021-03-10'
+),
+-- 步骤二：按时间排序累加，得到每个时刻的在线人数
+cumulative AS (
+    SELECT room_id, event_time,
+           SUM(user_type) OVER (PARTITION BY room_id ORDER BY event_time) AS online_cnt
+    FROM events
+)
+-- 步骤三：取每个房间的最大值
+SELECT room_id, MAX(online_cnt) AS max_online
+FROM cumulative
+GROUP BY room_id;
+```
+
+**3. 关键解析**：
+
+- `UNION ALL` 而非 `UNION`：进出事件是独立事件，即使值相同也不能去重，否则会丢失事件导致计算错误。
+- `SUM(user_type) OVER(PARTITION BY room_id ORDER BY event_time)`：`ORDER BY` 让 SUM 从「全局总和」变为「逐行累加」，这正是同时在线人数的计算方式。
+
+**4. 知识点延伸**：
+
+**每小时峰值（吸收 04_03）**：在步骤二的累计结果上，按小时粒度分组取最大值。
+
+```sql
+WITH events AS (
+    SELECT room_id, user_id, login_time AS event_time, 1 AS user_type FROM live_log
+    WHERE substr(login_time, 1, 10) = '2021-03-10'
+    UNION ALL
+    SELECT room_id, user_id, logout_time AS event_time, -1 AS user_type FROM live_log
+    WHERE substr(logout_time, 1, 10) = '2021-03-10'
+),
+cumulative AS (
+    SELECT room_id, event_time,
+           SUM(user_type) OVER (PARTITION BY room_id ORDER BY event_time) AS online_cnt
+    FROM events
+)
+SELECT room_id, substr(event_time, 1, 13) AS hour_slot, MAX(online_cnt) AS max_online
+FROM cumulative
+GROUP BY room_id, substr(event_time, 1, 13);
+```
+
+- `substr(event_time, 1, 13)` 取 `yyyy-mm-dd HH` 截取到小时粒度。
+
+**不限时段（吸收 04_04）**：去掉步骤一的日期 WHERE 筛选，计算有史以来每小时最大同时在线人数。
+
+```sql
+WITH events AS (
+    SELECT room_id, user_id, login_time AS event_time, 1 AS user_type FROM live_log
+    UNION ALL
+    SELECT room_id, user_id, logout_time AS event_time, -1 AS user_type FROM live_log
+),
+cumulative AS (
+    SELECT room_id, event_time,
+           SUM(user_type) OVER (PARTITION BY room_id ORDER BY event_time) AS online_cnt
+    FROM events
+)
+SELECT room_id, substr(event_time, 1, 13) AS hour_slot, MAX(online_cnt) AS max_online
+FROM cumulative
+GROUP BY room_id, substr(event_time, 1, 13);
+```
+
+**峰值时间（吸收 04_05）**：不仅求峰值人数，还要输出达到峰值的时间点。用 `RANK()` 取每个房间在线人数最高的那一行。
+
+```sql
+WITH events AS (
+    SELECT room_id, user_id, login_time AS event_time, 1 AS user_type FROM live_log
+    WHERE substr(login_time, 1, 10) = '2022-05-01'
+    UNION ALL
+    SELECT room_id, user_id, logout_time AS event_time, -1 AS user_type FROM live_log
+    WHERE substr(logout_time, 1, 10) = '2022-05-01'
+),
+cumulative AS (
+    -- 关键细节：order by event_time, user_type
+    -- user_type = -1（离开）排在 +1（进入）前面
+    -- 同一时刻"先出后进"的保守口径，避免峰值虚高
+    SELECT room_id, event_time,
+           SUM(user_type) OVER (PARTITION BY room_id ORDER BY event_time, user_type) AS online_cnt
+    FROM events
+)
+SELECT room_id, event_time AS peak_time, online_cnt AS max_online
+FROM (
+    SELECT room_id, event_time, online_cnt,
+           RANK() OVER (PARTITION BY room_id ORDER BY online_cnt DESC) AS rk
+    FROM cumulative
+) t
+WHERE rk = 1;
+```
+
+- `ORDER BY event_time, user_type`：`user_type` 的 -1 排在 +1 前面（升序）。当同一时刻有人进、有人出时，先处理 -1（离开）再处理 +1（进入），这是「保守口径」——峰值不会因为同一秒进出叠加而虚高。
+
+**5. 面试追问**：
+
+- **Q: 用 UNION 还是 UNION ALL？** A: `UNION ALL`。进出事件是独立语义，即使拼接后出现完全相同的行也不能去重。`UNION` 会去重，导致丢失事件、峰值计算偏低。
+- **Q: 同一秒有人进有人出算几个在线？** A: 口径问题。保守口径是先处理 -1 再处理 +1（峰值不虚高），通过 `ORDER BY event_time, user_type` 实现。激进口径则反过来。实际面试中说明口径即可。
+
+</details>
+
+---
+
+### Q9. 求最小达到某累计金额的日期 `★★★★★` `美团`
+
+> 来源：项目题号 `04_06`　表：`user_spend`
+
+**表结构：**
+
+| user_id (INTEGER) | dt (TEXT) | price (REAL) |
+|---|---|---|
+| 1 | 2024-01-01 | 300 |
+| 1 | 2024-01-02 | 500 |
+| 1 | 2024-01-03 | 400 |
+
+给定每个用户每天的消费金额，求每个用户累计消费首次达到 1000 元的日期。
+
+*提示：先累加，再 where 筛选，最后 min 取最早日期。*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：累计求和 → 筛选达标行 → 取最早日期，三步走。先用 `SUM() OVER()` 算出每个用户每天的累计消费，再筛选 `cum_price >= 1000` 的行，最后 `MIN(dt)` 取首次达标日期。
+
+**2. 参考 SQL（Hive 方言）**：
+
+```sql
+WITH cumulative AS (
+    SELECT user_id, dt, price,
+           SUM(price) OVER (PARTITION BY user_id ORDER BY dt) AS cum_price
+    FROM user_spend
+)
+SELECT user_id, MIN(dt) AS reach_date
+FROM cumulative
+WHERE cum_price >= 1000
+GROUP BY user_id;
+```
+
+**3. 关键解析**：
+
+- 累计消费使用 `SUM(price) OVER(PARTITION BY user_id ORDER BY dt)` 实现逐日累加。
+- 达标后可能持续达标（比如 1 月 3 日达标后 1 月 4 日仍然 >= 1000），所以需要 `MIN(dt)` 取最早的那一天。
+- `WHERE cum_price >= 1000` 在外层过滤，而非在 CTE 内部，因为窗口函数不能出现在 WHERE 中。
+
+**4. 知识点延伸**：
+
+**商品复购（吸收 04_07）**：计算每个用户购买了 >= 2 次的商品。
+
+```sql
+SELECT user_id, product_id
+FROM orders
+GROUP BY user_id, product_id
+HAVING COUNT(DISTINCT order_id) >= 2;
+```
+
+- `HAVING` 过滤聚合后的组（WHERE 过滤聚合前的行）。
+- 使用 `COUNT(DISTINCT order_id)` 而非 `COUNT(*)`：如果一个订单包含多行（如一个订单买多个商品），`COUNT(*)` 会把同一订单的多行都算进去，`COUNT(DISTINCT order_id)` 保证按订单去重。在本项目中 `orders` 表一行对应一条商品记录，但面试中口径题常见，用 `DISTINCT` 更稳健。
+
+**5. 面试追问**：
+
+- **Q: 为什么 MIN(dt) 还要 GROUP BY user_id？** A: 达标后可能持续达标（后续每天累计值都 >= 1000），`WHERE cum_price >= 1000` 会返回多行，需要 `GROUP BY user_id` 配合 `MIN(dt)` 取每个用户的最早达标日期。
+- **Q: HAVING 和 WHERE 的执行时机？** A: `WHERE` 在聚合前过滤行（`GROUP BY` 之前），`HAVING` 在聚合后过滤组（`GROUP BY` 之后）。窗口函数不能用 WHERE 过滤，需 CTE / 子查询先算再过滤。
+
+</details>
+
+---
+
 <!-- APPEND -->
