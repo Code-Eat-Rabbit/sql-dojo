@@ -55,4 +55,44 @@
 | 接雨水 | 每位储水 = `least(左滚动max, 右滚动max) - 当前高`，两侧 `max() over` 求出 | Q19 |
 | 找相邻更快者 | 非等值 join `b.time < a.time` + 取 `min`；更优：`lag() over(order by time)` | Q20 |
 
+## 1.3 JOIN 类型速查
+
+| 类型 | 语义 | 典型题 |
+|---|---|---|
+| inner join | 只留两边都匹配的行 | Q13 |
+| left join | 保左表全量，右表缺失补 NULL（留存题分母不丢的关键） | Q14 |
+| full outer join | 两边全保 | — |
+| 自关联 | 同表 join 两次（a/b 别名），用于"相互关注""日期衔接" | Q2 Q13 |
+| 非等值 join | 条件不是 `=` 而是 `<`/`>` 等，会产生数据放大，注意行数 | Q20 |
+| lateral view | Hive 表生成函数配合，一行变多行 | Q15 Q18 |
+
+**NOT IN 陷阱**（面试高频）：子查询结果集含 NULL 时，`NOT IN` 整体返回空。规避：`NOT EXISTS`，或子查询加 `WHERE col IS NOT NULL`。
+
+## 1.4 日期与字符串函数速查（Hive 口径）
+
+| 目标 | 写法 | 备注 |
+|---|---|---|
+| 年 | `substr(date, 1, 4)` 或 `year(date)` | 11_01 即此 |
+| 月 | `substr(date, 6, 2)` 或 `month(date)` | |
+| 季度 | `concat(substr(date,1,4), 'Q', cast((month(date)-1)/3+1 as string))` | 公式 `(m-1)/3+1` 必会手写 |
+| 半年 | 同上，`(m-1)/6+1` | |
+| 年月 | `substr(date, 1, 7)` 或 `date_format(date,'yyyy-MM')` | |
+| 日期差 | `datediff(a, b)`（a-b 天数） | Q1 Q2 |
+| 日期增减 | `date_add(d, n)` / `date_sub(d, n)`（n 可为负） | Q1 Q14 |
+| 取日期部分 | `to_date('2024-01-01 10:00:00')` → `2024-01-01` | 等价 substr(d,1,10) |
+| 月末 | `last_day(d)` | 滚动窗口常用 |
+| 字符串截取 | `substr(s, start, len)`（1 起） | |
+| 定位/分割 | `instr(s, sub)`、`split(s, ',')` | |
+| 拼接 | `concat(a, b)` / `concat_ws(',', col...)`（跳过 NULL） | Q16 |
+
+## 1.5 高频面试追问清单
+
+1. **窗口函数 vs GROUP BY**：GROUP BY 压缩为每组一行；窗口函数保留每行、附加计算列。要"既有明细又有聚合"时只能用窗口。
+2. **row_number / rank / dense_rank 怎么选**：要 TopN 去重（并列只取一个）用 row_number；名次要跳号用 rank；名次不跳号/取第 N 高用 dense_rank。
+3. **COUNT(DISTINCT) 数据倾斜**：单个 reducer 聚合大维度 → 先 `group by` 预聚合打散，或两阶段 distinct、 bitmap；高维维度拆分。
+4. **千亿级 join 优化**：小表广播（map-side join / mapjoin）、分桶表（bucket join，同键落同节点）、Bloom filter 预过滤、避免非等值 join 的笛卡尔放大（Q13 追问展开）。
+5. **union all vs union**：union all 保留全部（含重复），进出场计数必须用 union all；union 去重触发 shuffle，代价高。
+6. **Hive 与标准 SQL 差异**：`date_add(d, n)` 不是 `INTERVAL` 语法；多参取小用 `least()`（SQLite 是 `min()`）；`collect_list/collect_set` vs `group_concat`；`get_json_object` vs `json_extract`。
+7. **什么时候用递归 CTE，什么时候用开窗**：先看能否用 `row_number/lag + 聚合开窗` 的"分段子问题"套路解决（连续、分段、层级汇总大多可以）；真需要逐行传递状态（如逐行 forward fill、树遍历）才用递归——面试先答开窗解法是加分项（源自题 10_01 的辨析）。
+
 <!-- APPEND -->
