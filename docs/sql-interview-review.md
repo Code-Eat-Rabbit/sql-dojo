@@ -982,4 +982,156 @@ FROM status_log;
 
 ---
 
+## 组6 关联应用
+
+---
+
+### Q12. 每一门课大于60分的学生的所有科目成绩 `★★★☆☆` `子查询` `join` `关联`
+
+> 来源：项目题号 `06_01`　表：`student`、`sc`、`class`
+
+**表结构：**
+
+| student (id INTEGER, student_name TEXT) | | |
+|---|---|---|
+| id | student_name |
+| 1 | 张三 |
+| 5 | 钱七 |
+
+| sc (sid INTEGER, cid INTEGER, score REAL) | | |
+|---|---|---|
+| sid | cid | score |
+| 1 | 1 | 88.0 |
+| 5 | 3 | 72.0 |
+
+| class (id INTEGER, class_name TEXT) | | |
+|---|---|---|
+| id | class_name |
+| 1 | 语文 |
+| 3 | 英语 |
+
+查询「所有科目都大于 60 分」的学生的全部成绩记录。
+
+*提示：NOT IN 排除有不及格科目的学生，再用 JOIN 查出这些学生全部科目和成绩*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：全称量词的经典转化——"所有科目都 >60"等价于"不存在任何一门 <=60"。用 NOT IN 子查询排除有不及格记录的学生 id，再 JOIN 回 student、class、sc 三表取全部成绩明细。
+
+**2. 参考 SQL（Hive 方言）**：
+
+```sql
+SELECT t0.student_name, t2.class_name, t1.score
+FROM student t0
+JOIN sc t1 ON t0.id = t1.sid
+JOIN class t2 ON t1.cid = t2.id
+WHERE t0.id NOT IN (
+    SELECT sid FROM sc WHERE score <= 60
+);
+```
+
+**3. 关键解析**：
+
+- **双重否定思想**：SQL 没有"FOR ALL"量词，用 `NOT IN (存在 <=60 的 sid)` 实现"所有科目都 >60"——全称量词转化为对补集的否定，这是关系除法的基础思路。
+- 三表 JOIN 顺序：student → sc（按 id = sid）→ class（按 cid = id），最后用 WHERE 过滤合格学生。
+
+**4. 知识点延伸**：
+
+**聚合解法（group by + having）**：另一种思路是先按学生分组，`HAVING MIN(score) > 60` 筛选出每科都及格的学生，再 JOIN 回明细表拿全部记录：
+
+```sql
+SELECT s.student_name, c.class_name, sc.score
+FROM student s
+JOIN sc ON s.id = sc.sid
+JOIN class c ON sc.cid = c.id
+WHERE s.id IN (
+    SELECT sid FROM sc GROUP BY sid HAVING MIN(score) > 60
+);
+```
+
+**NOT IN 的 NULL 陷阱**：如果子查询 `SELECT sid FROM sc WHERE score <= 60` 返回的 sid 集合中包含 NULL，则 `NOT IN` 整体返回空集——因为 `x NOT IN (a, NULL, b)` 等价于 `x <> a AND x <> NULL AND x <> b`，而 `x <> NULL` 恒为 UNKNOWN，整个 AND 链结果为 UNKNOWN，WHERE 过滤掉所有行。安全替代写法用 `NOT EXISTS`：
+
+```sql
+SELECT t0.student_name, t2.class_name, t1.score
+FROM student t0
+JOIN sc t1 ON t0.id = t1.sid
+JOIN class t2 ON t1.cid = t2.id
+WHERE NOT EXISTS (
+    SELECT 1 FROM sc t3
+    WHERE t3.sid = t0.id AND t3.score <= 60
+);
+```
+
+**5. 面试追问**：
+
+- **Q: NOT IN 子查询里有 NULL 会怎样？** A: 返回空集。`NOT IN` 底层展开为 `<> AND <> AND ...`，只要集合中有 NULL，就会产生一个 `<> NULL` 恒为 UNKNOWN 的条件，导致整个 AND 表达式为 UNKNOWN，WHERE 过滤掉所有行。改用 `NOT EXISTS` 或 `NOT IN (SELECT ... WHERE col IS NOT NULL)` 可规避。
+- **Q: "存在一门 >60"和"所有科目 >60"的 SQL 写法差异？** A: "存在"直接用 `WHERE sid IN (SELECT sid FROM sc WHERE score > 60)`；"所有"需要双重否定——`NOT IN (SELECT sid FROM sc WHERE score <= 60)` 或聚合解法 `GROUP BY sid HAVING MIN(score) > 60`。前者是存在量词，后者是全称量词，SQL 处理方式完全不同。
+
+</details>
+
+---
+
+### Q13. 相互关注（共同好友） `★★★☆☆` `自关联` `join` `相互关注`
+
+> 来源：项目题号 `06_02`　表：`fans`
+
+**表结构：**
+
+| fans (from_user TEXT, to_user TEXT) | | |
+|---|---|---|
+| from_user | to_user |
+| alice | bob |
+| bob | alice |
+| alice | charlie |
+
+在关注关系表 `fans(from_user, to_user)` 中，找出相互关注的用户对。
+
+*提示：方法1 用自关联 a 关注 b 且 b 关注 a，方法2 用 union 后 group by having count >= 2*
+
+<details><summary>💡 思路与答案（点开前先自己想 5 分钟）</summary>
+
+**1. 解题思路**：相互关注 = A 关注 B 且 B 关注 A。两种思路：自关联（JOIN 自身，交换 from/to 匹配）或合并去重（双向 UNION ALL 后按对分组计数）。无论哪种，都需要去重避免 (A,B) 和 (B,A) 同时出现。
+
+**2. 参考 SQL（Hive 方言）**：
+
+```sql
+-- 方法1：自关联 JOIN
+SELECT a.from_user AS u1, a.to_user AS u2
+FROM fans a
+JOIN fans b ON a.from_user = b.to_user AND a.to_user = b.from_user
+WHERE a.from_user < a.to_user;
+
+-- 方法2：UNION ALL + GROUP BY
+SELECT u1, u2 FROM (
+    SELECT from_user AS u1, to_user AS u2 FROM fans
+    UNION ALL
+    SELECT to_user AS u1, from_user AS u2 FROM fans
+) t
+GROUP BY u1, u2
+HAVING COUNT(*) >= 2;
+```
+
+**3. 关键解析**：
+
+- **方法 1 的 `a.from_user < a.to_user`**：自关联会同时匹配 (alice,bob) 和 (bob,alice) 两行，加 `<` 条件只保留字典序较小的排列，实现无向对去重。
+- **方法 2 的 UNION ALL 双向展开**：将每条关注关系正反各写一次，相互关注的对会出现两次（正 + 反），单向关注的只出现一次。`HAVING COUNT(*) >= 2` 筛出出现 >=2 次的即为互关对。
+
+**4. 知识点延伸**：
+
+**千亿级数据优化（吸收 06_03）**：当数据量达到千亿级别时，普通 JOIN 会触发全量 shuffle（数据在节点间重分布），代价极高。核心优化策略：
+
+1. **Map-Side Join（小表广播）**：如果其中一张表足够小，将其广播到所有 Map 节点内存中，在 Map 阶段直接完成连接，完全避免 Shuffle。Hive 中用 `/*+ STREAMTABLE */` 提示或设置 `hive.auto.convert.join=true`。
+2. **分桶表（Bucket）**：按用户 ID 对两张表做相同数量的分桶（CLUSTERED BY user_id INTO N BUCKETS），保证相同键的数据落在同一节点。JOIN 时只做同桶连接，数据量降为原来的 1/N。
+3. **Bloom Filter 预过滤**：对一张表的键构建 Bloom Filter，先过滤另一张表中"不可能匹配"的行，大幅减少参与 JOIN 的数据量。Hive 中用 `/*+ BLOOM_FILTER */` 或 `set hive.bloom.filter.enabled=true`。
+4. **核心原则**：避免全量 Shuffle JOIN。Shuffle 是分布式计算中最昂贵的操作（全量数据网络传输 + 磁盘写），优先用上述手段将 JOIN 下推到 Map 端或缩小数据规模。
+
+**5. 面试追问**：
+
+- **Q: 为什么 WHERE 里加 `<` 比较？** A: 无向对去重。自关联 JOIN 会同时产生 (alice,bob) 和 (bob,alice) 两条结果，加 `a.from_user < a.to_user` 只保留字典序较小的那条，保证每对只出现一次。
+- **Q: 相互关注和"共同好友"区别？** A: 相互关注是二元关系判定——给定关系表，判断 A↔B 是否双向成立；共同好友是三元关系——给定关系表，找 A 和 B 共同关注的所有用户 C。后者需要找交集：A 关注的集合 ∩ B 关注的集合，SQL 写法为 `WHERE A.to_user = B.to_user AND A.from_user = '目标用户1' AND B.from_user = '目标用户2'`。两者底层都是 JOIN，但语义和输出维度不同。
+
+</details>
+
+---
+
 <!-- APPEND -->
