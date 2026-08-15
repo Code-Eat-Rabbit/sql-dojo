@@ -994,9 +994,9 @@ FROM status_log;
 
 | student (id INTEGER, student_name TEXT) | | |
 |---|---|---|
-| id | student_name |
-| 1 | 张三 |
-| 5 | 钱七 |
+| id | student_name | |
+| 1 | 张三 | |
+| 5 | 钱七 | |
 
 | sc (sid INTEGER, cid INTEGER, score REAL) | | |
 |---|---|---|
@@ -1006,9 +1006,9 @@ FROM status_log;
 
 | class (id INTEGER, class_name TEXT) | | |
 |---|---|---|
-| id | class_name |
-| 1 | 语文 |
-| 3 | 英语 |
+| id | class_name | |
+| 1 | 语文 | |
+| 3 | 英语 | |
 
 查询「所有科目都大于 60 分」的学生的全部成绩记录。
 
@@ -1079,10 +1079,10 @@ WHERE NOT EXISTS (
 
 | fans (from_user TEXT, to_user TEXT) | | |
 |---|---|---|
-| from_user | to_user |
-| alice | bob |
-| bob | alice |
-| alice | charlie |
+| from_user | to_user | |
+| alice | bob | |
+| bob | alice | |
+| alice | charlie | |
 
 在关注关系表 `fans(from_user, to_user)` 中，找出相互关注的用户对。
 
@@ -1694,5 +1694,3 @@ CREATE TABLE attendance (
 </details>
 
 ---
-
-<!-- APPEND -->
