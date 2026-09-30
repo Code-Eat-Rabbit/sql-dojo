@@ -555,10 +555,9 @@ if __name__ == "__main__":
 - [ ] **步骤 2：首次运行，确认红灯（预期失败清单）**
 
 运行：`uv run python data_builder/smoke_test.py; echo "exit=$?"`
-预期 `exit=1`，失败清单**恰好 13 题**：
-`['01_01', '01_02', '01_05', '01_06', '04_02', '04_03', '04_04', '04_08', '08_01', '08_02', '11_02', '13_01', '14_01']`
-逐题预期原因：01_01/01_05 Hive `date_add`/`date_sub` 两参语法错；01_02 `FROM (第三步子查询)` 语法错；01_06 lint `mydb.`；04_02/03/04 `FROM (步骤一)` 语法错；04_08 窗口函数在 WHERE（MySQL 错误 3593）；08_01 lint `||`；08_02 lint GROUP_CONCAT 双参；11_02 lint `||`；13_01 lint `JSON_EACH`；14_01 `invalid use of group function`。
-说明：10_02（SQLite 风格 DDL）在 scratch 库中语法可执行，首跑即为 ✓，任务 9 对它的改写只是类型规范化，不改变红绿状态。
+预期 `exit=1`，失败清单**恰好 17 题**：
+`['01_01', '01_02', '01_03', '01_05', '01_06', '01_07', '04_02', '04_03', '04_04', '04_08', '05_01', '08_01', '08_02', '10_02', '11_02', '13_01', '14_01']`
+逐题预期原因：01_01/01_05 Hive `date_add`/`date_sub` 两参语法错；01_02 `FROM (第三步子查询)` 语法错；01_03 方法 2 内层派生表无别名（MySQL 错误 1248——SQLite 允许，MySQL 必须别名）；01_06 lint `mydb.`；01_07 解法 2 按窗口函数别名 GROUP BY（MySQL 错误 1056）；04_02/03/04 `FROM (步骤一)` 语法错；04_08 窗口函数在 WHERE（MySQL 错误 3593）；05_01 CTE 名 `groups` 撞 MySQL 8 保留字（错误 1064）；08_01 lint `||`；08_02 lint GROUP_CONCAT 双参；10_02 `month TEXT` 进复合主键（MySQL 错误 1170——任务 9 步骤 10 的 VARCHAR(7) 改写恰好修复）；11_02 lint `||`；13_01 lint `JSON_EACH`；14_01 `invalid use of group function`。
 若失败清单之外的题也失败，先排查 builders 数据问题再进入任务 9。
 
 - [ ] **步骤 3：Commit（红灯也是成果）**
@@ -570,7 +569,7 @@ git commit -m "test: add reference_sql smoke test (currently 13-14 expected fail
 
 ---
 
-### 任务 9：manifest 参考答案改写——方言 10 题
+### 任务 9：manifest 参考答案改写——方言 13 题（含冒烟红灯新增 3 题）
 
 **文件：**
 - 修改：`data_builder/manifest.py`（下列题目的 `reference_sql` 字段，行号为现文件行号，改写后行数会漂移）
@@ -753,6 +752,66 @@ WHERE LEAST(lmax, rmax) > height;
 
 `FROM mydb.test_xiaoming` → `FROM test_xiaoming`（其余不动）。
 
+- [ ] **步骤 9A：01_03（行 151-172）方法 2 内层派生表补别名（MySQL 错误 1248）**
+
+方法 2（行 155-163）的内层子查询 `FROM (SELECT id, substr(date,1,10) AS date FROM test GROUP BY id, substr(date,1,10))` 缺别名，改为（仅加 `AS d`，其余不动）：
+
+```sql
+-- 方法2: lag()
+SELECT DISTINCT id
+FROM (
+    SELECT id, date,
+           LAG(date, 1) OVER (PARTITION BY id ORDER BY date) AS prev1,
+           LAG(date, 2) OVER (PARTITION BY id ORDER BY date) AS prev2
+    FROM (SELECT id, substr(date,1,10) AS date FROM test GROUP BY id, substr(date,1,10)) AS d
+) t
+WHERE DATEDIFF(date, prev1) = 1 AND DATEDIFF(prev1, prev2) = 1;
+```
+
+（方法 1 是纯注释、方法 3 已有别名，均不动。）
+
+- [ ] **步骤 9B：01_07（行 283-313）解法 2 重构（MySQL 错误 1056：不能按窗口函数别名分组）**
+
+解法 1 不动。解法 2（行 300-312）替换为（窗口函数移入内层 CTE，外层再分组，语义不变）：
+
+```sql
+-- 解法2：用 lag 判断是否连续胜
+WITH marked AS (
+    SELECT user_id, date, result,
+           CASE WHEN result = 'win' AND LAG(result) OVER (PARTITION BY user_id ORDER BY date) = 'win'
+                THEN 0 ELSE 1 END AS new_streak
+    FROM games
+),
+streaks AS (
+    SELECT user_id,
+           SUM(new_streak) OVER (PARTITION BY user_id ORDER BY date) AS streak_id
+    FROM marked
+    WHERE result = 'win'
+)
+SELECT user_id, streak_id, COUNT(*) AS streak_len
+FROM streaks
+GROUP BY user_id, streak_id;
+```
+
+- [ ] **步骤 9C：05_01（行 716-731）CTE 名 `groups` 撞 MySQL 8 保留字（错误 1064），改名 `grouped`**
+
+```sql
+WITH intervals AS (
+    SELECT start, end,
+           MAX(end) OVER (ORDER BY start ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS max_end_so_far,
+           CASE WHEN start > MAX(end) OVER (ORDER BY start ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)
+                THEN 1 ELSE 0 END AS new_group
+    FROM raw_intervals
+),
+grouped AS (
+    SELECT start, end, SUM(new_group) OVER (ORDER BY start) AS group_id
+    FROM intervals
+)
+SELECT MIN(start) AS merged_start, MAX(end) AS merged_end
+FROM grouped
+GROUP BY group_id;
+```
+
 - [ ] **步骤 10：10_02（行 1017-1043，SQLite 风格 DDL）替换为**
 
 ```sql
@@ -786,7 +845,7 @@ CREATE TABLE attendance (
 - [ ] **步骤 11：运行冒烟验证进度**
 
 运行：`uv run python data_builder/smoke_test.py; echo "exit=$?"`
-预期：本任务 10 题全部 ✓；剩余失败仅任务 10 的 4 题：`['01_02', '04_02', '04_03', '04_04']`
+预期：本任务 13 题（01_01、01_03、01_05、01_06、01_07、04_08、05_01、08_01、08_02、10_02、11_02、13_01、14_01）全部 ✓；剩余失败仅任务 10 的 4 题：`['01_02', '04_02', '04_03', '04_04']`
 
 - [ ] **步骤 12：Commit**
 
