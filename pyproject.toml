@@ -20,7 +20,9 @@ classifiers = [
 ]
 
 dependencies = [
+    "cryptography>=50.0.1",
     "fastapi[standard]>=0.115.0",
+    "pymysql>=1.2.3",
 ]
 
 [dependency-groups]
