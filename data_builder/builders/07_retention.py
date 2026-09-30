@@ -1,15 +1,15 @@
 """Builder for Category 07: 留存计算"""
 
-import sqlite3
 import random
 
 
-def build(conn: sqlite3.Connection):
+def build(conn):
+    cur = conn.cursor()
     # ===== user_active 表：用户活跃记录 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS user_active (
             user_id INTEGER,
-            date TEXT
+            date VARCHAR(20)
         )
     """)
 
@@ -33,6 +33,6 @@ def build(conn: sqlite3.Connection):
         if day7 <= 31 and random.random() < 0.4:
             user_active_data.append((user_id, f"2024-01-{day7:02d}"))
 
-    conn.executemany("INSERT INTO user_active (user_id, date) VALUES (?, ?)", user_active_data)
+    cur.executemany("INSERT INTO user_active (user_id, date) VALUES (%s, %s)", user_active_data)
 
     print(f"     user_active: {len(user_active_data)} rows")

@@ -1,16 +1,16 @@
 """Builder for Category 09: 合并区间"""
 
-import sqlite3
 import random
 
 
-def build(conn: sqlite3.Connection):
+def build(conn):
+    cur = conn.cursor()
     # ===== status_log 表：状态标记 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS status_log (
             id INTEGER,
-            status TEXT,
-            start_time TEXT
+            status VARCHAR(128),
+            start_time VARCHAR(20)
         )
     """)
 
@@ -24,14 +24,14 @@ def build(conn: sqlite3.Connection):
             status_log_data.append((obj_id, status, start))
             hour += random.randint(1, 4)
 
-    conn.executemany("INSERT INTO status_log (id, status, start_time) VALUES (?, ?, ?)", status_log_data)
+    cur.executemany("INSERT INTO status_log (id, status, start_time) VALUES (%s, %s, %s)", status_log_data)
 
     # ===== data_table 表：填补缺失值（含 NULL） =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS data_table (
             id INTEGER,
-            date TEXT,
-            value REAL
+            date VARCHAR(10),
+            value DOUBLE
         )
     """)
 
@@ -46,7 +46,7 @@ def build(conn: sqlite3.Connection):
                 val += random.uniform(-5, 5)
                 data_table_data.append((group_id, f"2024-06-{day:02d}", round(val, 2)))
 
-    conn.executemany("INSERT INTO data_table (id, date, value) VALUES (?, ?, ?)", data_table_data)
+    cur.executemany("INSERT INTO data_table (id, date, value) VALUES (%s, %s, %s)", data_table_data)
 
     print(f"     status_log: {len(status_log_data)} rows")
     print(f"     data_table: {len(data_table_data)} rows")

@@ -1,40 +1,40 @@
 """Builder for Category 06: 关联应用"""
 
-import sqlite3
 import random
 
 
-def build(conn: sqlite3.Connection):
+def build(conn):
+    cur = conn.cursor()
     # ===== student 表 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS student (
             id INTEGER PRIMARY KEY,
-            student_name TEXT
+            student_name VARCHAR(128)
         )
     """)
 
     random.seed(600)
     names = ["张三", "李四", "王五", "赵六", "钱七"]
     student_data = [(i + 1, name) for i, name in enumerate(names)]
-    conn.executemany("INSERT INTO student (id, student_name) VALUES (?, ?)", student_data)
+    cur.executemany("INSERT INTO student (id, student_name) VALUES (%s, %s)", student_data)
 
     # ===== class 表 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS class (
             id INTEGER PRIMARY KEY,
-            class_name TEXT
+            class_name VARCHAR(128)
         )
     """)
 
     class_data = [(1, "语文"), (2, "数学"), (3, "英语"), (4, "物理")]
-    conn.executemany("INSERT INTO class (id, class_name) VALUES (?, ?)", class_data)
+    cur.executemany("INSERT INTO class (id, class_name) VALUES (%s, %s)", class_data)
 
     # ===== sc 表：成绩 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS sc (
             sid INTEGER,
             cid INTEGER,
-            score REAL
+            score DOUBLE
         )
     """)
 
@@ -54,13 +54,13 @@ def build(conn: sqlite3.Connection):
     for cid in range(1, 5):
         sc_data_with_good.append((5, cid, float(random.randint(65, 95))))
 
-    conn.executemany("INSERT INTO sc (sid, cid, score) VALUES (?, ?, ?)", sc_data_with_good)
+    cur.executemany("INSERT INTO sc (sid, cid, score) VALUES (%s, %s, %s)", sc_data_with_good)
 
     # ===== fans 表：关注关系 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS fans (
-            from_user TEXT,
-            to_user TEXT
+            from_user VARCHAR(128),
+            to_user VARCHAR(128)
         )
     """)
 
@@ -78,7 +78,7 @@ def build(conn: sqlite3.Connection):
         ("eve", "charlie"),
         ("bob", "charlie"),
     ]
-    conn.executemany("INSERT INTO fans (from_user, to_user) VALUES (?, ?)", fans_data)
+    cur.executemany("INSERT INTO fans (from_user, to_user) VALUES (%s, %s)", fans_data)
 
     print(f"     student: {len(student_data)} rows")
     print(f"     class: {len(class_data)} rows")

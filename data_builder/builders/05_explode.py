@@ -1,15 +1,15 @@
 """Builder for Category 05: 炸裂函数"""
 
-import sqlite3
 import random
 
 
-def build(conn: sqlite3.Connection):
+def build(conn):
+    cur = conn.cursor()
     # ===== raw_intervals 表：区间合并 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS raw_intervals (
             start INTEGER,
-            "end" INTEGER
+            `end` INTEGER
         )
     """)
 
@@ -33,6 +33,6 @@ def build(conn: sqlite3.Connection):
     for start, end in raw_pairs:
         intervals_data.append((start, end))
 
-    conn.executemany('INSERT INTO raw_intervals (start, "end") VALUES (?, ?)', intervals_data)
+    cur.executemany('INSERT INTO raw_intervals (start, `end`) VALUES (%s, %s)', intervals_data)
 
     print(f"     raw_intervals: {len(intervals_data)} rows")
