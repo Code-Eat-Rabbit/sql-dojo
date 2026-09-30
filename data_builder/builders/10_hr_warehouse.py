@@ -1,18 +1,18 @@
 """Builder for Category 10: 人事数仓表格设计"""
 
-import sqlite3
 import random
 
 
-def build(conn: sqlite3.Connection):
+def build(conn):
+    cur = conn.cursor()
     # ===== employee 表 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS employee (
             emp_id INTEGER PRIMARY KEY,
-            name TEXT,
+            name VARCHAR(128),
             dept_id INTEGER,
-            hire_date TEXT,
-            status TEXT
+            hire_date VARCHAR(10),
+            status VARCHAR(128)
         )
     """)
 
@@ -31,18 +31,18 @@ def build(conn: sqlite3.Connection):
         status = random.choice(["在职", "在职", "在职", "离职"])  # 75% 在职
         employee_data.append((emp_id, name, dept_id, hire_date, status))
 
-    conn.executemany(
-        "INSERT INTO employee (emp_id, name, dept_id, hire_date, status) VALUES (?, ?, ?, ?, ?)",
+    cur.executemany(
+        "INSERT INTO employee (emp_id, name, dept_id, hire_date, status) VALUES (%s, %s, %s, %s, %s)",
         employee_data
     )
 
     # ===== salary 表 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS salary (
             emp_id INTEGER,
-            month TEXT,
-            base_salary REAL,
-            bonus REAL,
+            month VARCHAR(7),
+            base_salary DOUBLE,
+            bonus DOUBLE,
             PRIMARY KEY (emp_id, month)
         )
     """)
@@ -55,18 +55,18 @@ def build(conn: sqlite3.Connection):
             bonus = round(random.uniform(0, 5000), 2)
             salary_data.append((emp_id, month_str, base, bonus))
 
-    conn.executemany(
-        "INSERT INTO salary (emp_id, month, base_salary, bonus) VALUES (?, ?, ?, ?)",
+    cur.executemany(
+        "INSERT INTO salary (emp_id, month, base_salary, bonus) VALUES (%s, %s, %s, %s)",
         salary_data
     )
 
     # ===== attendance 表 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS attendance (
             emp_id INTEGER,
-            date TEXT,
-            check_in TEXT,
-            check_out TEXT
+            date VARCHAR(10),
+            check_in VARCHAR(20),
+            check_out VARCHAR(20)
         )
     """)
 
@@ -82,8 +82,8 @@ def build(conn: sqlite3.Connection):
                 check_out = f"{out_hour:02d}:{out_min:02d}:00"
                 attendance_data.append((emp_id, f"2024-07-{day:02d}", check_in, check_out))
 
-    conn.executemany(
-        "INSERT INTO attendance (emp_id, date, check_in, check_out) VALUES (?, ?, ?, ?)",
+    cur.executemany(
+        "INSERT INTO attendance (emp_id, date, check_in, check_out) VALUES (%s, %s, %s, %s)",
         attendance_data
     )
 

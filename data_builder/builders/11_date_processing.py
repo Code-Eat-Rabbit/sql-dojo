@@ -1,14 +1,14 @@
 """Builder for Category 11: 日期处理"""
 
-import sqlite3
 import random
 
 
-def build(conn: sqlite3.Connection):
+def build(conn):
+    cur = conn.cursor()
     # ===== date_table 表：各种日期格式 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS date_table (
-            date TEXT
+            date VARCHAR(10)
         )
     """)
 
@@ -24,6 +24,6 @@ def build(conn: sqlite3.Connection):
 
     # 确保有重复月份用于测试
     date_data = list(set(date_data))
-    conn.executemany("INSERT INTO date_table (date) VALUES (?)", date_data)
+    cur.executemany("INSERT INTO date_table (date) VALUES (%s)", date_data)
 
     print(f"     date_table: {len(date_data)} rows")

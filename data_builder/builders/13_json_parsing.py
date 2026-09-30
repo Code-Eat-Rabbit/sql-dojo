@@ -1,14 +1,14 @@
 """Builder for Category 13: JSON 解析"""
 
-import sqlite3
 import json
 import random
 
 
-def build(conn: sqlite3.Connection):
-    # ===== json_table 表：含 JSON 字段 =====
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS json_table (
+def build(conn):
+    cur = conn.cursor()
+    # ===== json_table 表：含 JSON 字段（表名撞 MySQL 8 保留函数 JSON_TABLE，需反引号） =====
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS `json_table` (
             id INTEGER,
             data TEXT
         )
@@ -29,6 +29,6 @@ def build(conn: sqlite3.Connection):
         }
         json_data.append((i + 1, json.dumps(obj, ensure_ascii=False)))
 
-    conn.executemany("INSERT INTO json_table (id, data) VALUES (?, ?)", json_data)
+    cur.executemany("INSERT INTO `json_table` (id, data) VALUES (%s, %s)", json_data)
 
     print(f"     json_table: {len(json_data)} rows")
