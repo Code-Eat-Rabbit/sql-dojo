@@ -1,7 +1,10 @@
 """GET /api/databases/{id}/connect"""
 
 from fastapi import APIRouter
-from backend.database import get_practice_db_path
+from backend.database import (
+    MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD,
+    get_schema_name, schema_exists, mysql_cli_command, mysql_jdbc_url,
+)
 
 router = APIRouter()
 
@@ -17,9 +20,15 @@ def get_connection(category_id: str):
     if not cat:
         return {"error": "Category not found"}
 
-    db_path = get_practice_db_path(cat.db_file)
+    schema = get_schema_name(cat.db_file)
     return {
         "db_file": cat.db_file,
-        "connection_string": f"sqlite:///{db_path}",
-        "exists": db_path.exists(),
+        "schema": schema,
+        "host": MYSQL_HOST,
+        "port": MYSQL_PORT,
+        "user": MYSQL_USER,
+        "password": MYSQL_PASSWORD,
+        "jdbc_url": mysql_jdbc_url(schema),
+        "cli_command": mysql_cli_command(schema),
+        "exists": schema_exists(schema),
     }

@@ -3,7 +3,8 @@
 import json
 from fastapi import APIRouter, HTTPException, Query
 from backend.database import (
-    get_progress_connection, get_practice_db_path, get_table_schema
+    get_progress_connection, get_table_schema,
+    mysql_cli_command, mysql_jdbc_url,
 )
 
 router = APIRouter()
@@ -119,8 +120,9 @@ def get_problem(problem_id: str):
             "mastery_level": row["mastery_level"] or 0,
             "last_practiced_at": row["last_practiced_at"],
         },
-        "db_file": row["db_path"].split("/")[-1] if row["db_path"] else "",
-        "db_connection": f"sqlite:///{row['db_path']}",
+        "db_file": row["db_path"],
+        "db_connection": mysql_cli_command(row["db_path"]),
+        "jdbc_url": mysql_jdbc_url(row["db_path"]),
     }
 
 
@@ -138,12 +140,12 @@ def get_problem_tables(problem_id: str):
         conn.close()
         raise HTTPException(status_code=404, detail="Problem not found")
 
-    db_file = row["db_path"].split("/")[-1] if row["db_path"] else ""
+    schema = row["db_path"]
     table_names = json.loads(row["table_names"]) if row["table_names"] else []
 
     tables = []
     for tname in table_names:
-        info = get_table_schema(db_file, tname)
+        info = get_table_schema(schema, tname)
         if info:
             tables.append(info)
 
@@ -151,5 +153,6 @@ def get_problem_tables(problem_id: str):
 
     return {
         "tables": tables,
-        "db_connection": f"sqlite:///{row['db_path']}",
+        "db_connection": mysql_cli_command(schema),
+        "jdbc_url": mysql_jdbc_url(schema),
     }
