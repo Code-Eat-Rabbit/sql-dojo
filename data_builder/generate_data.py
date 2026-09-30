@@ -42,7 +42,7 @@ def run_all():
             continue
 
         conn = ensure_db(cat)
-        print(f"  📦 {cat.name} ({cat.db_file})")
+        print(f"  📦 {cat.name} (schema: {cat.db_file[:-3]})")
 
         if hasattr(mod, 'build'):
             mod.build(conn)
@@ -71,7 +71,7 @@ def run_all():
     init_progress_db()
     seed_problems()
 
-    print(f"\nDone! {len(builders_to_run)} databases in {DATABASES_DIR}/")
+    print(f"\nDone! {len(builders_to_run)} MySQL schemas created (progress data at {DATABASES_DIR}/progress.db)")
 
 
 if __name__ == "__main__":

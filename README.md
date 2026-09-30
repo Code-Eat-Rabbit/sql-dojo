@@ -45,7 +45,7 @@ SQL Dojo transforms a curated collection of **44 real SQL interview problems** (
 | 10 | 人事数仓 / HR Data Warehouse | 2 | Star schema, dimension modeling |
 | 11 | 日期处理 / Date Processing | 3 | Format conversion, relative date windows |
 | 12 | 大厂原题 / Company Questions | 5 | ByteDance, Alibaba, PDD, Dewu |
-| 13 | JSON 解析 / JSON Parsing | 1 | `JSON_EXTRACT`, `JSON_EACH` |
+| 13 | JSON 解析 / JSON Parsing | 1 | `JSON_EXTRACT`, `JSON_TABLE` |
 | 14 | 趣味 SQL / Fun SQL | 4 | Trapping rain water, horse racing, block entropy |
 
 ## 🚀 Quick Start

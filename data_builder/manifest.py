@@ -41,7 +41,7 @@ class Category:
     Attributes:
         id: 专题唯一标识，如 "01"。
         name: 专题名称，如 "连续登陆"。
-        db_file: 对应的 SQLite 数据库文件名。
+        db_file: 专题标识文件名（去掉 .db 后缀即 MySQL schema 名）。
         order: 排序序号。
         problems: 该专题包含的题目列表。
     """
@@ -961,7 +961,7 @@ GROUP BY a.first_date;
                 description="""
 给定一个用户和其标签列表（逗号分隔），把标签展开为多行。
 
-English: Given users with comma-separated tags, expand each tag into its own row (string-to-rows). Use recursive CTE in SQLite to simulate explode.
+English: Given users with comma-separated tags, expand each tag into its own row (string-to-rows). Use recursive CTE in MySQL 8 to simulate explode.
 """,
                 reference_sql="""
 -- MySQL 8 用递归 CTE 模拟 explode（对应 Hive 的 lateral view explode）
@@ -993,7 +993,7 @@ SELECT user_id, tag FROM split WHERE tag != '';
                 description="""
 把多行数据按用户合并为一行（聚合标签）。
 
-English: Aggregate multiple rows per user back into a single row with concatenated tags (rows-to-string). Use GROUP_CONCAT in SQLite.
+English: Aggregate multiple rows per user back into a single row with concatenated tags (rows-to-string). Use GROUP_CONCAT in MySQL 8.
 """,
                 reference_sql="""
 SELECT user_id,
