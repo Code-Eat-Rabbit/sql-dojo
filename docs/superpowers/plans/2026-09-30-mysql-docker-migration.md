@@ -206,10 +206,12 @@ def ensure_db(category) -> pymysql.connections.Connection:
 - [ ] **步骤 3：替换表清单查询（原 L56-58 的 sqlite_master）**
 
 ```python
-            tables = conn.execute(
-                "SELECT table_name FROM information_schema.tables "
-                "WHERE table_schema = DATABASE() ORDER BY table_name"
-            ).fetchall()
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_schema = DATABASE() ORDER BY table_name"
+                )
+                tables = cur.fetchall()
             table_names = [t[0] for t in tables]
 ```
 
@@ -217,7 +219,9 @@ def ensure_db(category) -> pymysql.connections.Connection:
 
 ```python
             for tname in table_names:
-                cnt = conn.execute(f"SELECT COUNT(*) FROM `{tname}`").fetchone()[0]
+                with conn.cursor() as cur:
+                    cur.execute(f"SELECT COUNT(*) FROM `{tname}`")
+                    cnt = cur.fetchone()[0]
 ```
 
 （保持原有打印格式，仅数据来源更换。）
@@ -265,8 +269,9 @@ git commit -m "feat: generate_data orchestrates MySQL schemas instead of sqlite 
 
 1. 删除 `import sqlite3`；`def build(conn: sqlite3.Connection):` → `def build(conn):`
 2. `?` 占位符 → `%s`：先 `grep -n '?' <文件>` 确认所有 `?` 都在 SQL 字符串内，再执行 `sed -i '' 's/?/%s/g' <文件>`，之后 `grep -n '?' <文件>` 应零命中
-3. DDL 中 `TEXT` 列按下方映射改 `VARCHAR(n)`；`REAL` → `DOUBLE`；`INTEGER` 保留
-4. DDL/INSERT 中的表名与列名不用加反引号（本组无保留字）
+3. **cursor API**：PyMySQL 连接没有 sqlite3 的 `conn.execute`/`conn.executemany` 便捷方法——在 `def build(conn):` 之后第一行加 `cur = conn.cursor()`，然后把 `conn.execute(` 全部改为 `cur.execute(`、`conn.executemany(` 全部改为 `cur.executemany(`（连接是 autocommit=True，无需 commit；文件末尾无需显式关 cursor）
+4. DDL 中 `TEXT` 列按下方映射改 `VARCHAR(n)`；`REAL` → `DOUBLE`；`INTEGER` 保留
+5. DDL/INSERT 中的表名与列名不用加反引号（本组无保留字）
 
 **列类型映射表（SQLite TEXT → MySQL VARCHAR）：**
 
@@ -402,7 +407,7 @@ heights 表加 `idx` 列。DDL 改为：
 
 ```python
     heights_data = [(i + 1, h) for i, h in enumerate(heights_vals)]
-    conn.executemany("INSERT INTO heights (idx, height) VALUES (%s, %s)", heights_data)
+    cur.executemany("INSERT INTO heights (idx, height) VALUES (%s, %s)", heights_data)
 ```
 
 - [ ] **步骤 1：按通用改法 + 映射表 + 13/14 专属修复修改 4 个文件**

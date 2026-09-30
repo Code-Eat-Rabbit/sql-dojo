@@ -87,7 +87,7 @@
 | `?` 占位符 | `%s` |
 | `datetime('now')` | `NOW()` |
 | `julianday()` 差值 | `DATEDIFF()` |
-| `executemany` 批量插入 | 同名 API 直接可用 |
+| `conn.execute` / `conn.executemany` | `cur = conn.cursor()` 后在 cursor 上调用同名 API（PyMySQL 连接无便捷方法） |
 
 ### 5.2 参考答案（Hive → MySQL 8）
 
