@@ -51,13 +51,17 @@ def run_all():
         conn.commit()
 
         # 打印表信息
-        tables = conn.execute(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_schema = DATABASE() ORDER BY table_name"
-        ).fetchall()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema = DATABASE() ORDER BY table_name"
+            )
+            tables = cur.fetchall()
         table_names = [t[0] for t in tables]
         for tname in table_names:
-            cnt = conn.execute(f"SELECT COUNT(*) FROM `{tname}`").fetchone()[0]
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT COUNT(*) FROM `{tname}`")
+                cnt = cur.fetchone()[0]
             print(f"     📊 {tname}: {cnt} rows")
 
         conn.close()
