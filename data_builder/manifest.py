@@ -139,12 +139,28 @@ HAVING COUNT(*) > 3;
 English: Following the previous problem, find the maximum consecutive login days for each user.
 """,
                 reference_sql="""
--- 承接上一问第二步
--- select id, date1, count(*) as day_cnt from (第二步子查询) group by id, date
-
--- 最终：
+-- 承接 01_01 的思路：去重 → row_number 差值分组 → 按用户取最大连续天数
+WITH dedup AS (
+    SELECT id, SUBSTR(date, 1, 10) AS date
+    FROM test
+    GROUP BY id, SUBSTR(date, 1, 10)
+),
+numbered AS (
+    SELECT id, date,
+           ROW_NUMBER() OVER (PARTITION BY id ORDER BY date) AS rn
+    FROM dedup
+),
+flagged AS (
+    SELECT id, DATE_ADD(date, INTERVAL -rn DAY) AS date1
+    FROM numbered
+),
+day_cnt AS (
+    SELECT id, date1, COUNT(*) AS day_cnt
+    FROM flagged
+    GROUP BY id, date1
+)
 SELECT id, MAX(day_cnt) AS max_day_cnt
-FROM (第三步子查询)
+FROM day_cnt
 GROUP BY id;
 """,
                 tables=["test"],
@@ -545,19 +561,35 @@ English: Peak concurrent online users: given user enter/leave timestamps, treat 
                 reference_sql="""
 -- 步骤一：进入+1，离开-1
 SELECT room_id, user_id, login_time AS event_time, 1 AS user_type FROM live_log
-WHERE substr(login_time, 1, 8) = '20210310'
+WHERE SUBSTR(login_time, 1, 8) = '20210310'
 UNION ALL
 SELECT room_id, user_id, logout_time AS event_time, -1 AS user_type FROM live_log
-WHERE substr(logout_time, 1, 8) = '20210310';
+WHERE SUBSTR(logout_time, 1, 8) = '20210310';
 
 -- 步骤二：按时间累加
 SELECT room_id, event_time,
        SUM(user_type) OVER (PARTITION BY room_id ORDER BY event_time) AS online_cnt
-FROM (步骤一);
+FROM (
+    SELECT room_id, user_id, login_time AS event_time, 1 AS user_type FROM live_log
+    WHERE SUBSTR(login_time, 1, 8) = '20210310'
+    UNION ALL
+    SELECT room_id, user_id, logout_time AS event_time, -1 AS user_type FROM live_log
+    WHERE SUBSTR(logout_time, 1, 8) = '20210310'
+) events;
 
 -- 步骤三：取最大值
 SELECT room_id, MAX(online_cnt) AS max_online
-FROM (步骤二)
+FROM (
+    SELECT room_id, event_time,
+           SUM(user_type) OVER (PARTITION BY room_id ORDER BY event_time) AS online_cnt
+    FROM (
+        SELECT room_id, user_id, login_time AS event_time, 1 AS user_type FROM live_log
+        WHERE SUBSTR(login_time, 1, 8) = '20210310'
+        UNION ALL
+        SELECT room_id, user_id, logout_time AS event_time, -1 AS user_type FROM live_log
+        WHERE SUBSTR(logout_time, 1, 8) = '20210310'
+    ) events
+) online
 GROUP BY room_id;
 """,
                 tables=["live_log"],
@@ -578,15 +610,21 @@ GROUP BY room_id;
 English: Within a specified time range, calculate the maximum concurrent online users per hour.
 """,
                 reference_sql="""
--- 在步骤二的 event_time 上加 substr 取小时粒度即可
-SELECT room_id, substr(event_time, 1, 13) AS hour_slot,
+-- 在步骤二的 event_time 上加 SUBSTR 取小时粒度即可
+SELECT room_id, SUBSTR(event_time, 1, 13) AS hour_slot,
        MAX(online_cnt) AS max_online
 FROM (
     SELECT room_id, event_time,
            SUM(user_type) OVER (PARTITION BY room_id ORDER BY event_time) AS online_cnt
-    FROM (步骤一)
-) t
-GROUP BY room_id, substr(event_time, 1, 13);
+    FROM (
+        SELECT room_id, user_id, login_time AS event_time, 1 AS user_type FROM live_log
+        WHERE SUBSTR(login_time, 1, 8) = '20210310'
+        UNION ALL
+        SELECT room_id, user_id, logout_time AS event_time, -1 AS user_type FROM live_log
+        WHERE SUBSTR(logout_time, 1, 8) = '20210310'
+    ) events
+) online
+GROUP BY room_id, SUBSTR(event_time, 1, 13);
 """,
                 tables=["live_log"],
                 hints=[
@@ -606,10 +644,18 @@ English: Remove the date filter to calculate all-time hourly maximum concurrent 
 """,
                 reference_sql="""
 -- 去掉 WHERE 日期筛选即可
-SELECT room_id, substr(event_time, 1, 13) AS hour_slot,
+SELECT room_id, SUBSTR(event_time, 1, 13) AS hour_slot,
        MAX(online_cnt) AS max_online
-FROM (...去掉日期限制的子查询...) t
-GROUP BY room_id, substr(event_time, 1, 13);
+FROM (
+    SELECT room_id, event_time,
+           SUM(user_type) OVER (PARTITION BY room_id ORDER BY event_time) AS online_cnt
+    FROM (
+        SELECT room_id, user_id, login_time AS event_time, 1 AS user_type FROM live_log
+        UNION ALL
+        SELECT room_id, user_id, logout_time AS event_time, -1 AS user_type FROM live_log
+    ) events
+) online
+GROUP BY room_id, SUBSTR(event_time, 1, 13);
 """,
                 tables=["live_log"],
                 hints=[
@@ -956,7 +1002,7 @@ FROM user_tag_rows
 GROUP BY user_id;
 """,
                 tables=["user_tag_rows"],
-                hints=["group_concat 是 SQLite 的字符串聚合函数"],
+                hints=["MySQL 用 GROUP_CONCAT(col SEPARATOR ',') 做字符串聚合"],
             ),
         ],
     ),
@@ -1139,11 +1185,11 @@ English: Summary of all date format conversions: year, month, quarter, half-year
                 reference_sql="""
 -- year:  SUBSTR(date, 1, 4)
 -- mm:    SUBSTR(date, 6, 2)
--- quarter: SUBSTR(date, 1, 4) || 'Q' || ((month-1)/3 + 1)
--- half:  SUBSTR(date, 1, 4) || 'H' || ((month-1)/6 + 1)
+-- quarter: CONCAT(SUBSTR(date, 1, 4), 'Q', (CAST(SUBSTR(date, 6, 2) AS UNSIGNED) - 1) DIV 3 + 1)
+-- half:  CONCAT(SUBSTR(date, 1, 4), 'H', (CAST(SUBSTR(date, 6, 2) AS UNSIGNED) - 1) DIV 6 + 1)
 -- ytm:   日期转 YYYYMM 格式
--- last12m: 最近12个月（date >= date_sub(today, interval 12 month)）
--- last30d/60d/90d/180d: 类似，用 date_sub
+-- last12m: 最近12个月（date >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)）
+-- last30d/60d/90d/180d: 类似，用 DATE_SUB
 """,
                 tables=["date_table"],
                 hints=["记住 substr + 算术的组合模式"],
