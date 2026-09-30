@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-18-61DAFB.svg)](https://react.dev/)
-[![SQLite](https://img.shields.io/badge/SQLite-3-003B57.svg)](https://www.sqlite.org/)
+[![MySQL](https://img.shields.io/badge/MySQL-8-4479A1.svg)](https://www.mysql.com/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ---
@@ -15,7 +15,7 @@
 SQL Dojo transforms a curated collection of **44 real SQL interview problems** (from companies like ByteDance, Alibaba, PDD, Jidu, and Dewu) into a fully interactive practice environment. Each problem comes with:
 
 - **Auto-generated practice data** — deterministic, reproducible, guaranteed to produce results
-- **Per-topic SQLite databases** — open any topic in DBeaver and see only the relevant tables
+- **Per-topic MySQL schemas** — open any topic in DBeaver and see only the relevant tables
 - **Reference solutions with step-by-step explanations**
 - **A CodeTop-style web dashboard** — browse problems, track progress, rate your mastery
 
@@ -26,7 +26,7 @@ SQL Dojo transforms a curated collection of **44 real SQL interview problems** (
 | **Practice environment** | Web-based SQL editor | **Your own DBeaver / DataGrip** |
 | **Data visibility** | Hidden test cases | **Full table access, explore data freely** |
 | **Progress tracking** | Pass/fail counter | **Mastery rating + completion count + time decay** |
-| **Offline capability** | Requires internet | **Fully local — SQLite files on your disk** |
+| **Offline capability** | Requires internet | **Fully local — MySQL 8 running in Docker on your machine** |
 | **Customizable** | Fixed problems | **Add your own problems via manifest.py** |
 
 ## 📊 Topics Covered
@@ -54,7 +54,8 @@ SQL Dojo transforms a curated collection of **44 real SQL interview problems** (
 
 - Python 3.12+
 - Node.js 20+
-- [DBeaver](https://dbeaver.io/) (or any SQLite-compatible client)
+- Docker Desktop (runs MySQL 8)
+- [DBeaver](https://dbeaver.io/) (or any MySQL-compatible client)
 
 ### 1. Clone & Generate Data
 
@@ -64,16 +65,17 @@ cd sql-dojo
 
 # One-click start (generates data, installs deps, starts backend + frontend)
 bash start.sh
+# First run pulls the mysql:8.4 image (~200MB) and generates practice data
 ```
 
 Or start components individually:
 
 ```bash
 # Generate data first
-python3 data_builder/generate_data.py
+uv run python data_builder/generate_data.py
 
 # Terminal 1: backend
-python3 -m uvicorn backend.main:app --port 8000
+uv run python -m uvicorn backend.main:app --port 8000
 
 # Terminal 2: frontend
 cd frontend && npm install && npm run dev
@@ -83,16 +85,16 @@ Open `http://localhost:5173` in your browser.
 
 ### 4. Connect DBeaver
 
-Open DBeaver → New Connection → SQLite → browse to `databases/01_continuous_login.db`. Write SQL, verify your results, then mark the problem as complete in the web dashboard.
+Open DBeaver → New Connection → MySQL → host 127.0.0.1, port 3306, user root, password practice, database <topic schema>. Write SQL, verify your results, then mark the problem as complete in the web dashboard.
 
-The connection string is also displayed on each problem's detail page — click to copy.
+The connection info (mysql CLI command + JDBC URL) is also displayed on each problem's detail page — click to copy.
 
 ## 🏗️ Architecture
 
 ```
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  data_builder │────▶│  databases/  │◀────│   DBeaver    │
-│  (Python)     │     │  (14 × .db)  │     │  (your SQL)  │
+│  data_builder │────▶│ MySQL (Docker) │◀────│   DBeaver    │
+│  (Python)     │     │  (13 schemas)  │     │  (your SQL)  │
 └──────────────┘     └──────┬───────┘     └──────────────┘
                             │
                      ┌──────▼───────┐
@@ -107,7 +109,7 @@ The connection string is also displayed on each problem's detail page — click 
 ```
 
 - **`data_builder/`** — Python scripts that analyze each problem's reference SQL and generate deterministic datasets guaranteed to produce non-empty results
-- **`databases/`** — 14 per-topic SQLite files + `progress.db` for tracking
+- **`databases/`** — `progress.db` for progress tracking (practice data lives in the MySQL Docker volume)
 - **`backend/`** — FastAPI REST API serving problem metadata, table schemas, and progress operations
 - **`frontend/`** — React SPA with two pages: topic list (home) and problem list + detail (per topic)
 
@@ -119,10 +121,10 @@ sql-dojo/
 │   ├── manifest.py              # All problem metadata (44 problems, 14 categories)
 │   ├── generate_data.py         # Orchestrator: run all builders
 │   └── builders/                # One builder per category (01-14)
-├── databases/                   # Generated SQLite files (gitignored)
+├── databases/                   # progress.db only, gitignored (practice data in MySQL)
 ├── backend/
 │   ├── main.py                  # FastAPI app entry point
-│   ├── database.py              # Multi-DB connection + progress.db management
+│   ├── database.py              # progress.db management + MySQL practice-DB access
 │   ├── models/schemas.py        # Pydantic request/response models
 │   └── routers/
 │       ├── categories.py        # GET /api/categories

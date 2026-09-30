@@ -1,7 +1,7 @@
 # SQL 面试复习手册
 
 > 数据来源：本项目 `data_builder/manifest.py`（44 题，精选 21 题 + 16 题以变式/延伸吸收）。
-> 方言口径：Hive SQL（面试标准），SQLite 差异处单独标注。
+> 方言口径：MySQL 8（本地练习环境），Hive SQL 差异处单独标注。
 
 ## 使用说明
 
@@ -50,8 +50,8 @@
 | 全称量词（每科都>60） | 双重否定：`not in`（存在不及格的学生）；或 `group by + having min(score) > 60` | Q12 |
 | 相互关注 | 自关联 `a.from=b.to and a.to=b.from`；或 `union all` 双向 + `having count>=2` | Q13 |
 | N 日留存 | `min(date)` 定首活 → `left join` 第 N 天活跃 → `count(distinct)` 分子分母 | Q14 |
-| 行转列（炸裂） | Hive：`lateral view explode(split(col, ','))`；SQLite：递归 CTE 模拟 | Q15 |
-| 列转行（聚合） | Hive：`concat_ws(',', collect_list(col))`；SQLite：`group_concat` | Q16 |
+| 行转列（炸裂） | Hive：`lateral view explode(split(col, ','))`；MySQL 8：`JSON_TABLE` / 递归 CTE | Q15 |
+| 列转行（聚合） | Hive：`concat_ws(',', collect_list(col))`；MySQL 8：`GROUP_CONCAT(col SEPARATOR ',')` | Q16 |
 | 接雨水 | 每位储水 = `least(左滚动max, 右滚动max) - 当前高`，两侧 `max() over` 求出 | Q19 |
 | 找相邻更快者 | 非等值 join `b.time < a.time` + 取 `min`；更优：`lag() over(order by time)` | Q20 |
 
@@ -92,7 +92,7 @@
 3. **COUNT(DISTINCT) 数据倾斜**：单个 reducer 聚合大维度 → 先 `group by` 预聚合打散，或两阶段 distinct、 bitmap；高维维度拆分。
 4. **千亿级 join 优化**：小表广播（map-side join / mapjoin）、分桶表（bucket join，同键落同节点）、Bloom filter 预过滤、避免非等值 join 的笛卡尔放大（Q13 追问展开）。
 5. **union all vs union**：union all 保留全部（含重复），进出场计数必须用 union all；union 去重触发 shuffle，代价高。
-6. **Hive 与标准 SQL 差异**：`date_add(d, n)` 不是 `INTERVAL` 语法；`/` 恒返回 double，整除用 `div`；多参取小用 `least()`（SQLite 是 `min()`）；`collect_list/collect_set` vs `group_concat`；`get_json_object` vs `json_extract`。
+6. **Hive 与 MySQL 差异**：`date_add(d, n)` 不是 `INTERVAL` 语法；Hive `/` 恒返回 double，MySQL `/` 同为小数除法（整除用 `DIV`）；多参取小都用 `LEAST()`；`collect_list/collect_set` vs `GROUP_CONCAT`；`get_json_object` vs `JSON_EXTRACT`。
 7. **什么时候用递归 CTE，什么时候用开窗**：先看能否用 `row_number/lag + 聚合开窗` 的"分段子问题"套路解决（连续、分段、层级汇总大多可以）；真需要逐行传递状态（如逐行 forward fill、树遍历）才用递归——面试先答开窗解法是加分项（源自题 10_01 的辨析）。
 
 # Part 2 精选题册
@@ -493,7 +493,7 @@ FROM metrics;
 
 **3. 关键解析**：
 
-- `* 100.0` 是关键：整数相除截断是 SQLite/Postgres 等引擎的行为（本项目本地 SQLite 即如此，如 `20 / 100 = 0`）；Hive 的 `/` 恒返回 double，无此问题。但 `*100.0` 写法跨方言稳健、无害，保留是好习惯。
+- `* 100.0` 是关键：部分引擎（如 SQLite/Postgres）整数相除会截断（`20 / 100 = 0`）；Hive 与 MySQL 的 `/` 都返回小数（MySQL 中 `20 / 100 = 0.2000`），无截断问题。但 `*100.0` 写法跨方言稳健、无害，保留是好习惯。
 - `ROUND(..., 2)` 保留两位小数，便于阅读。
 - 同一个 `LAG(value) OVER (ORDER BY date)` 写了三次，引擎只计算一次（优化器去重）。
 
@@ -955,7 +955,7 @@ LEFT JOIN data_table t
   ON t.id = m.id AND t.date = m.last_nn_date;
 ```
 
-> **SQLite/本地练习写法**（相关子查询版，O(n^2) 性能，部分 Hive 版本不支持子查询内 LIMIT）：
+> **MySQL/本地练习写法**（相关子查询版，O(n^2) 性能，部分 Hive 版本不支持子查询内 LIMIT）：
 > ```sql
 > WITH filled AS (
 >     SELECT id, date, value,
@@ -1215,7 +1215,7 @@ GROUP BY a.first_date;
 - **Q: 为什么用 LEFT JOIN 而不是 INNER JOIN？** A: 分母必须完整。INNER JOIN 会把第 7 天未活跃的用户从结果中剔除，导致分母只包含留存用户，算出的留存率恒为 100%。LEFT JOIN 保留所有首活用户，未留存的 `b.user_id` 为 NULL，正确反映真实留存率。
 - **Q: 用户第 7 天活跃多次算几次？** A: `COUNT(DISTINCT b.user_id)` 保证每个用户只算一次。如果用 `COUNT(b.user_id)`（不加 DISTINCT），同一天多次活跃的用户会被重复计算，虚高留存人数。
 
-> 📌 SQLite 等价写法：将 `date_add(a.first_date, 7)` 替换为 `DATE(a.first_date, '+7 days')`，其余逻辑完全相同。
+> 📌 Hive 等价写法：将 `DATE_ADD(a.first_date, INTERVAL 7 DAY)` 替换为 Hive 的 `date_add(a.first_date, 7)`，其余逻辑完全相同。
 
 </details>
 
@@ -1267,10 +1267,12 @@ LATERAL VIEW EXPLODE(SPLIT(tags, ',')) t AS tag;
 - **Q: explode 和 lateral view 的关系？** A: `explode` 是表生成函数（UDTF），输入一行输出多行，但不能直接与原表列共存。`LATERAL VIEW` 是连接语法，把 UDTF 的输出虚拟成一张表，与主表的每一行做类 CROSS JOIN，使 explode 结果可以和原表列一起查询。
 - **Q: tags 中有空串元素怎么处理？** A: split 后产生的空串可以用 `WHERE tag != ''` 过滤；或者在 split 前清洗数据，用 `regexp_replace(tags, ',+', ',')` 合并连续逗号、`trim` 去首尾逗号。
 
-> 📌 SQLite 等价写法：SQLite 没有 explode，需用递归 CTE 逐字符解析：
+> 📌 MySQL 写法：MySQL 8 没有 explode，用递归 CTE 模拟（对应 Hive 的 lateral view explode）：
 > ```sql
+> -- MySQL 8 用递归 CTE 模拟 explode（对应 Hive 的 lateral view explode）
+> -- CAST 锚定列宽，避免递归部分 SUBSTR 结果被截断
 > WITH RECURSIVE split(user_id, tag, rest) AS (
->     SELECT user_id, '', tags || ','
+>     SELECT user_id, CAST('' AS CHAR(128)), CONCAT(tags, ',')
 >     FROM user_tags
 >     UNION ALL
 >     SELECT user_id,
@@ -1331,7 +1333,7 @@ GROUP BY user_id;
 - **Q: 要去重且保序怎么办？** A: `collect_set` 去重但不保序，`collect_list` 保序但不去重。如果业务要求既去重又保序，可以用 `sort_array(collect_set(tag))`（先去重再排序），但排序是字典序而非原始插入序。严格保序去重需要用窗口函数 `ROW_NUMBER() PARTITION BY tag` 先去重再 `collect_list`。
 - **Q: `concat_ws` 遇 NULL 怎么处理？** A: `concat_ws` 会自动跳过 NULL 元素，只拼接非 NULL 值。而 `concat` 只要有一个入参是 NULL，整个结果就是 NULL。所以在聚合场景中，`concat_ws` 更安全。
 
-> 📌 SQLite 等价写法：`SELECT user_id, GROUP_CONCAT(tag, ',') AS tags FROM user_tag_rows GROUP BY user_id;`
+> 📌 MySQL 写法：`SELECT user_id, GROUP_CONCAT(tag SEPARATOR ',') AS tags FROM user_tag_rows GROUP BY user_id;`
 
 </details>
 
@@ -1379,12 +1381,12 @@ FROM date_table;
 -- 最近90天 ：WHERE date >= date_sub(current_date, 90)
 -- 最近180天：WHERE date >= date_sub(current_date, 180)
 
--- 注意：Hive 的 / 恒返回 double，整除必须用 div（SQLite 的 / 对整数即整除，原公式在 SQLite 下成立）
+-- 注意：Hive 与 MySQL 的 / 都返回小数，整除必须分别用 div / DIV（如 3 月：(3-1)/3+1 = 1.666...，结果错误）
 ```
 
 **3. 关键解析**：
 
-- **季度公式 `(m-1) div 3 + 1`**：这是一个整除分桶公式。1-3 月 → `(0,1,2) div 3 + 1` = `Q1`；4-6 月 → `(3,4,5) div 3 + 1` = `Q2`；以此类推。先减 1 是为了让 1-3 月从 0 开始整除，保证每 3 个月落进同一个桶。`cast(... as string)` 是 Hive 口径（SQLite 用 `CAST(... AS TEXT)`）。**Hive 中整除必须用 `div`，`/` 恒返回 double**（如 3 月：`(3-1)/3+1 = 1.666...`，结果错误）。
+- **季度公式 `(m-1) div 3 + 1`**：这是一个整除分桶公式。1-3 月 → `(0,1,2) div 3 + 1` = `Q1`；4-6 月 → `(3,4,5) div 3 + 1` = `Q2`；以此类推。先减 1 是为了让 1-3 月从 0 开始整除，保证每 3 个月落进同一个桶。`cast(... as string)` 是 Hive 口径（MySQL 用 `CAST(... AS CHAR)` 或 CONCAT 隐式转换）。**Hive/MySQL 中整除都必须用 div/DIV**（如 3 月：`(3-1)/3+1 = 1.666...`，结果错误）。
 - **半年度公式 `(m-1) div 6 + 1`**：同理，每 6 个月一个桶。1-6 月 → `H1`，7-12 月 → `H2`。同样必须用 `div`。
 - **year 写法**：`substr(date, 1, 4)` 即可，详见 1.4 速查表。
 
@@ -1392,7 +1394,7 @@ FROM date_table;
 
 - **季度公式的推导（吸收 11_02）**：关键在于 `(month-1) div 3` 这一步——它是整除分桶的标准写法。将连续值映射到离散桶号时，先减去起始偏移（`-1`），再除以桶宽（`div 3`），最后加起始桶号（`+1`）。这个模式可以推广到任意等宽分桶场景，如：将 1-100 分成 10 桶用 `(val-1) div 10 + 1`。
 - **year 写法交叉引用 1.4 速查表**：年份提取 `substr(date, 1, 4)` 在 1.4 节已有覆盖，此处不再赘述。
-- **Hive vs SQLite 口径差异**：Hive 中整数转字符串用 `cast(col as string)`，SQLite 用 `CAST(col AS TEXT)`。功能等价，只是方言关键字不同。
+- **Hive vs MySQL 口径差异**：Hive 中整数转字符串用 `cast(col as string)`，MySQL 用 `CAST(col AS CHAR)` 或 CONCAT 隐式转换。功能等价，只是方言关键字不同。
 
 **5. 面试追问**：
 
@@ -1466,18 +1468,20 @@ WHERE trim(raw_item) != '';
 - **Q: `get_json_object` 和 `json_tuple` 选哪个？** A: 单字段提取或需要取嵌套路径（如 `$.a.b[0]`）时用 `get_json_object`；一次提取多个平铺字段时用 `json_tuple`，只解析一次 JSON 性能更好。两者可以混用。
 - **Q: JSON 数据存表里好还是拆成独立列好？** A: 数仓规范一般落地为独立列或复杂类型（`ARRAY`/`MAP`/`STRUCT`），避免每次查询都做 JSON 解析。JSON 存表适合：schema 不稳定的临时数据、需要保留原始结构的数据。落地到正式表时应在 ETL 阶段拆列。
 
-> 📌 SQLite 等价写法：
+> 📌 MySQL 写法：
 > ```sql
 > -- 提取标量字段
 > SELECT id,
->        json_extract(data, '$.name') AS name,
->        json_extract(data, '$.age')  AS age
-> FROM json_table;
+>        JSON_EXTRACT(data, '$.name') AS name,
+>        JSON_EXTRACT(data, '$.age') AS age
+> FROM `json_table`;
 >
-> -- 展开 JSON 数组
-> SELECT id,
->        json_each.value AS item
-> FROM json_table, JSON_EACH(json_table.data, '$.items');
+> -- 展开 JSON 数组（JSON_TABLE 是 MySQL 8 表函数，对应 Hive 的 lateral view explode）
+> SELECT jt.id,
+>        items.item
+> FROM `json_table` jt,
+>      JSON_TABLE(jt.data, '$.items[*]'
+>          COLUMNS (item VARCHAR(64) PATH '$')) AS items;
 > ```
 
 </details>
@@ -1554,11 +1558,11 @@ WHERE LEAST(lmax, rmax) > height;
 **5. 面试追问**：
 
 - **Q: 为什么两端柱子不接水？** A: `LEAST(lmax, rmax)` 中必有一侧是自身高度（最左端 rmax 包含自身、最右端 lmax 包含自身），差值一定为 0，被 `WHERE LEAST(lmax, rmax) > height` 过滤掉。
-- **Q: Hive 里多参数取最小值用哪个函数？** A: `LEAST(a, b, ...)`。SQLite（及 MySQL 等部分引擎）多参取小用 `MIN(a, b, ...)`——这是方言差异的常见坑点。注意 `MIN()` 在多数 SQL 中是聚合函数，但 SQLite 允许它做标量多参取小，Hive/Spark 则严格区分 `LEAST()`（标量）和 `MIN()`（聚合）。
+- **Q: Hive 里多参数取最小值用哪个函数？** A: `LEAST(a, b, ...)`，MySQL 同为 `LEAST()`。（SQLite 允许 `MIN(a,b,...)` 做标量多参取小，Hive/MySQL 严格区分 `LEAST()`（标量）和 `MIN()`（聚合）。）
 
-> 📌 SQLite 等价写法：
+> 📌 MySQL 写法：
 > ```sql
-> -- SQLite 用 MIN() 替代 LEAST()，其余窗口语法相同
+> -- MySQL/Hive 直接用 LEAST()，其余窗口语法相同
 > WITH numbered AS (
 >     SELECT ROW_NUMBER() OVER () AS idx, height
 >     FROM heights
@@ -1573,9 +1577,9 @@ WHERE LEAST(lmax, rmax) > height;
 >            MAX(height) OVER (ORDER BY idx DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS rmax
 >     FROM left_max
 > )
-> SELECT SUM(MIN(lmax, rmax) - height) AS total_water
+> SELECT SUM(LEAST(lmax, rmax) - height) AS total_water
 > FROM right_max
-> WHERE MIN(lmax, rmax) > height;
+> WHERE LEAST(lmax, rmax) > height;
 > ```
 
 </details>
