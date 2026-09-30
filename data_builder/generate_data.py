@@ -1,8 +1,8 @@
-"""数据生成入口：遍历 manifest → 运行 builder → 输出 SQLite 文件"""
+"""数据生成入口：遍历 manifest → 运行 builder → 输出到 MySQL schema"""
 
 import sys
 import importlib
-import sqlite3
+import time
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -10,16 +10,14 @@ DATABASES_DIR = BASE_DIR / "databases"
 BUILDERS_DIR = Path(__file__).resolve().parent / "builders"
 
 sys.path.insert(0, str(BASE_DIR))
+from data_builder import db as mysql_db
 from data_builder.manifest import CATEGORIES, get_all_problems
 
 
 def ensure_db(category):
-    """为专题创建空白 SQLite 文件"""
-    DATABASES_DIR.mkdir(parents=True, exist_ok=True)
-    db_path = DATABASES_DIR / category.db_file
-    if db_path.exists():
-        db_path.unlink()  # 重建，确保数据一致
-    return sqlite3.connect(str(db_path))
+    """每个 category 一个 MySQL schema：DROP 后重建，替代原删 .db 文件逻辑"""
+    schema = category.db_file[:-3]  # "01_continuous_login.db" -> "01_continuous_login"
+    return mysql_db.reset_schema(schema)
 
 
 def run_all():
@@ -54,11 +52,13 @@ def run_all():
 
         # 打印表信息
         tables = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = DATABASE() ORDER BY table_name"
         ).fetchall()
-        for (tname,) in tables:
-            count = conn.execute(f"SELECT COUNT(*) FROM {tname}").fetchone()[0]
-            print(f"     📊 {tname}: {count} rows")
+        table_names = [t[0] for t in tables]
+        for tname in table_names:
+            cnt = conn.execute(f"SELECT COUNT(*) FROM `{tname}`").fetchone()[0]
+            print(f"     📊 {tname}: {cnt} rows")
 
         conn.close()
 
@@ -71,4 +71,13 @@ def run_all():
 
 
 if __name__ == "__main__":
+    try:
+        mysql_db.wait_for_mysql(timeout=30)
+    except SystemExit:
+        print("⚠️  MySQL 首次连接失败，5 秒后重试一次...")
+        time.sleep(5)
+        try:
+            mysql_db.wait_for_mysql(timeout=30)
+        except SystemExit as e:
+            raise SystemExit(f"{e}\n请检查容器状态：docker compose ps && docker compose logs mysql")
     run_all()
