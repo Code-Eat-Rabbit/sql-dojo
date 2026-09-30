@@ -119,12 +119,14 @@ export default function ProblemListPage() {
   const [detail, setDetail] = useState<ProblemDetail | null>(null)
   const [tables, setTables] = useState<TableInfo[]>([])
   const [dbConnection, setDbConnection] = useState('')
+  const [jdbcUrl, setJdbcUrl] = useState('')
   const [loadingList, setLoadingList] = useState(true)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showAnswer, setShowAnswer] = useState(false)
   const [showRating, setShowRating] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [copiedJdbc, setCopiedJdbc] = useState(false)
 
   // Load problem list
   useEffect(() => {
@@ -148,6 +150,7 @@ export default function ProblemListPage() {
       setDetail(d)
       setTables(t.tables)
       setDbConnection(t.db_connection)
+      setJdbcUrl(t.jdbc_url)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load problem')
     } finally {
@@ -213,6 +216,14 @@ export default function ProblemListPage() {
     navigator.clipboard.writeText(dbConnection).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  const handleCopyJdbc = () => {
+    if (!jdbcUrl) return
+    navigator.clipboard.writeText(jdbcUrl).then(() => {
+      setCopiedJdbc(true)
+      setTimeout(() => setCopiedJdbc(false), 2000)
     })
   }
 
@@ -304,35 +315,32 @@ export default function ProblemListPage() {
 
             {/* DbConnectionInfo */}
             <div className="bg-gray-50 rounded-lg p-4 mb-6 border border-gray-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-xs text-gray-500 uppercase tracking-wide">Database</span>
-                  <p className="text-sm font-mono text-gray-700 mt-0.5">{detail.db_file}</p>
-                </div>
-                <button
-                  onClick={handleCopy}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-white border border-gray-300 rounded-md hover:bg-gray-100 transition-colors"
-                >
-                  {copied ? (
-                    <>
-                      <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      Copied
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                      Copy connection string
-                    </>
-                  )}
-                </button>
+              <div>
+                <span className="text-xs text-gray-500 uppercase tracking-wide">Database (MySQL 8)</span>
+                <p className="text-sm font-mono text-gray-700 mt-0.5">{detail.db_file}</p>
               </div>
-              {dbConnection && (
-                <p className="text-xs font-mono text-gray-400 mt-2 truncate">{dbConnection}</p>
-              )}
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500 w-8 shrink-0">CLI</span>
+                  <p className="text-xs font-mono text-gray-500 truncate flex-1">{dbConnection}</p>
+                  <button
+                    onClick={handleCopy}
+                    className="px-3 py-1.5 text-xs bg-white border border-gray-300 rounded-md hover:bg-gray-100 transition-colors shrink-0"
+                  >
+                    {copied ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500 w-8 shrink-0">JDBC</span>
+                  <p className="text-xs font-mono text-gray-400 truncate flex-1">{jdbcUrl}</p>
+                  <button
+                    onClick={handleCopyJdbc}
+                    className="px-3 py-1.5 text-xs bg-white border border-gray-300 rounded-md hover:bg-gray-100 transition-colors shrink-0"
+                  >
+                    {copiedJdbc ? 'Copied' : 'Copy'}
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Description */}

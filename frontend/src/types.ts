@@ -48,6 +48,7 @@ export interface ProblemDetail {
   progress: ProgressInfo | null
   db_file: string
   db_connection: string
+  jdbc_url: string
 }
 
 export interface ColumnInfo {
@@ -69,6 +70,7 @@ export interface TableInfo {
 export interface TablesResponse {
   tables: TableInfo[]
   db_connection: string
+  jdbc_url: string
 }
 
 export interface CompleteResponse {
