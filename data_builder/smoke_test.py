@@ -20,6 +20,11 @@ from data_builder.manifest import CATEGORIES, get_all_problems
 
 SCHEMAS = {cat.id: cat.db_file[:-3] for cat in CATEGORIES}
 
+# 合法返回空结果集的 executable 题目白名单：(题 id, 理由)
+EMPTY_RESULT_OK: dict[str, str] = {
+    # "xx_xx": "理由",
+}
+
 FORBIDDEN_PATTERNS = [
     (r"\|\|", "SQLite 拼接 || → 用 CONCAT()"),
     (r"JSON_EACH", "SQLite JSON_EACH → 用 JSON_TABLE()"),
@@ -66,11 +71,16 @@ def run_problem(prob) -> tuple[str, str]:
         issues = lint(prob.reference_sql)
         if issues:
             return kind, "lint: " + "; ".join(issues)
+        has_rows = False
         for stmt in statements(prob.reference_sql):
             with target.cursor() as cur:
                 cur.execute(stmt)
-                if cur.description:
-                    cur.fetchall()
+                if cur.description and cur.fetchall():
+                    has_rows = True
+        if kind == "executable" and not has_rows:
+            if prob.id not in EMPTY_RESULT_OK:
+                return kind, "FAIL: 所有语句均返回空结果集（且不在白名单）"
+            return kind, "ok (whitelisted empty)"
         return kind, "ok"
     finally:
         target.close()

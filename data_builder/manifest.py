@@ -561,20 +561,20 @@ English: Peak concurrent online users: given user enter/leave timestamps, treat 
                 reference_sql="""
 -- 步骤一：进入+1，离开-1
 SELECT room_id, user_id, login_time AS event_time, 1 AS user_type FROM live_log
-WHERE SUBSTR(login_time, 1, 8) = '20210310'
+WHERE SUBSTR(login_time, 1, 10) = '2021-03-10'
 UNION ALL
 SELECT room_id, user_id, logout_time AS event_time, -1 AS user_type FROM live_log
-WHERE SUBSTR(logout_time, 1, 8) = '20210310';
+WHERE SUBSTR(logout_time, 1, 10) = '2021-03-10';
 
 -- 步骤二：按时间累加
 SELECT room_id, event_time,
        SUM(user_type) OVER (PARTITION BY room_id ORDER BY event_time) AS online_cnt
 FROM (
     SELECT room_id, user_id, login_time AS event_time, 1 AS user_type FROM live_log
-    WHERE SUBSTR(login_time, 1, 8) = '20210310'
+    WHERE SUBSTR(login_time, 1, 10) = '2021-03-10'
     UNION ALL
     SELECT room_id, user_id, logout_time AS event_time, -1 AS user_type FROM live_log
-    WHERE SUBSTR(logout_time, 1, 8) = '20210310'
+    WHERE SUBSTR(logout_time, 1, 10) = '2021-03-10'
 ) events;
 
 -- 步骤三：取最大值
@@ -584,10 +584,10 @@ FROM (
            SUM(user_type) OVER (PARTITION BY room_id ORDER BY event_time) AS online_cnt
     FROM (
         SELECT room_id, user_id, login_time AS event_time, 1 AS user_type FROM live_log
-        WHERE SUBSTR(login_time, 1, 8) = '20210310'
+        WHERE SUBSTR(login_time, 1, 10) = '2021-03-10'
         UNION ALL
         SELECT room_id, user_id, logout_time AS event_time, -1 AS user_type FROM live_log
-        WHERE SUBSTR(logout_time, 1, 8) = '20210310'
+        WHERE SUBSTR(logout_time, 1, 10) = '2021-03-10'
     ) events
 ) online
 GROUP BY room_id;
@@ -618,10 +618,10 @@ FROM (
            SUM(user_type) OVER (PARTITION BY room_id ORDER BY event_time) AS online_cnt
     FROM (
         SELECT room_id, user_id, login_time AS event_time, 1 AS user_type FROM live_log
-        WHERE SUBSTR(login_time, 1, 8) = '20210310'
+        WHERE SUBSTR(login_time, 1, 10) = '2021-03-10'
         UNION ALL
         SELECT room_id, user_id, logout_time AS event_time, -1 AS user_type FROM live_log
-        WHERE SUBSTR(logout_time, 1, 8) = '20210310'
+        WHERE SUBSTR(logout_time, 1, 10) = '2021-03-10'
     ) events
 ) online
 GROUP BY room_id, SUBSTR(event_time, 1, 13);
@@ -676,10 +676,10 @@ English: For a specific date, find the maximum concurrent viewer count per live 
                 reference_sql="""
 WITH events AS (
     SELECT room_id, user_id, login_time AS event_time, 1 AS user_type FROM live_log
-    WHERE substr(login_time, 1, 8) = '20220501'
+    WHERE substr(login_time, 1, 10) = '2022-05-01'
     UNION ALL
     SELECT room_id, user_id, logout_time AS event_time, -1 AS user_type FROM live_log
-    WHERE substr(logout_time, 1, 8) = '20220501'
+    WHERE substr(logout_time, 1, 10) = '2022-05-01'
 ),
 cumulative AS (
     SELECT room_id, event_time,
