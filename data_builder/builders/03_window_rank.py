@@ -1,14 +1,14 @@
 """Builder for Category 03: 三种排序开窗"""
 
-import sqlite3
 import random
 
 
-def build(conn: sqlite3.Connection):
+def build(conn):
+    cur = conn.cursor()
     # ===== scores 表：演示三种排序 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS scores (
-            student TEXT,
+            student VARCHAR(128),
             score INTEGER
         )
     """)
@@ -22,13 +22,13 @@ def build(conn: sqlite3.Connection):
         s = score_pool[i % len(score_pool)]
         scores_data.append((student, s))
 
-    conn.executemany("INSERT INTO scores (student, score) VALUES (?, ?)", scores_data)
+    cur.executemany("INSERT INTO scores (student, score) VALUES (%s, %s)", scores_data)
 
     # ===== student_scores 表：每学生第二高科目 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS student_scores (
-            student TEXT,
-            subject TEXT,
+            student VARCHAR(128),
+            subject VARCHAR(128),
             score INTEGER
         )
     """)
@@ -41,7 +41,7 @@ def build(conn: sqlite3.Connection):
             # 制造一些并列第二的情况
             student_scores_data.append((student, subject, score))
 
-    conn.executemany("INSERT INTO student_scores (student, subject, score) VALUES (?, ?, ?)", student_scores_data)
+    cur.executemany("INSERT INTO student_scores (student, subject, score) VALUES (%s, %s, %s)", student_scores_data)
 
     print(f"     scores: {len(scores_data)} rows")
     print(f"     student_scores: {len(student_scores_data)} rows")

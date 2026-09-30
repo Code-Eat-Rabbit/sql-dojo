@@ -1,15 +1,15 @@
 """Builder for Category 04: 累计汇总"""
 
-import sqlite3
 import random
 
 
-def build(conn: sqlite3.Connection):
+def build(conn):
+    cur = conn.cursor()
     # ===== user_visits 表：累计访问次数 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS user_visits (
             user_id INTEGER,
-            month_id TEXT,
+            month_id VARCHAR(7),
             visit_cnt_1m INTEGER
         )
     """)
@@ -21,15 +21,15 @@ def build(conn: sqlite3.Connection):
             visits = random.randint(1, 30)
             user_visits_data.append((user_id, f"2024-{month:02d}", visits))
 
-    conn.executemany("INSERT INTO user_visits (user_id, month_id, visit_cnt_1m) VALUES (?, ?, ?)", user_visits_data)
+    cur.executemany("INSERT INTO user_visits (user_id, month_id, visit_cnt_1m) VALUES (%s, %s, %s)", user_visits_data)
 
     # ===== live_log 表：直播间进出日志 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS live_log (
             room_id INTEGER,
             user_id INTEGER,
-            login_time TEXT,
-            logout_time TEXT
+            login_time VARCHAR(20),
+            logout_time VARCHAR(20)
         )
     """)
 
@@ -61,14 +61,14 @@ def build(conn: sqlite3.Connection):
             logout2 = f"2021-03-10 {out_h2:02d}:{out_m2:02d}:00"
             live_log_data.append((room_id, user_id + 10, login2, logout2))
 
-    conn.executemany("INSERT INTO live_log (room_id, user_id, login_time, logout_time) VALUES (?, ?, ?, ?)", live_log_data)
+    cur.executemany("INSERT INTO live_log (room_id, user_id, login_time, logout_time) VALUES (%s, %s, %s, %s)", live_log_data)
 
     # ===== user_spend 表：用户累计消费达到1000元 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS user_spend (
             user_id INTEGER,
-            dt TEXT,
-            price REAL
+            dt VARCHAR(10),
+            price DOUBLE
         )
     """)
 
@@ -78,14 +78,14 @@ def build(conn: sqlite3.Connection):
             price = random.uniform(20, 200)
             user_spend_data.append((user_id, f"2024-03-{day:02d}", round(price, 2)))
 
-    conn.executemany("INSERT INTO user_spend (user_id, dt, price) VALUES (?, ?, ?)", user_spend_data)
+    cur.executemany("INSERT INTO user_spend (user_id, dt, price) VALUES (%s, %s, %s)", user_spend_data)
 
     # ===== orders 表：商品复购 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS orders (
             user_id INTEGER,
-            product_id TEXT,
-            order_id TEXT
+            product_id VARCHAR(64),
+            order_id VARCHAR(64)
         )
     """)
 
@@ -99,14 +99,14 @@ def build(conn: sqlite3.Connection):
             orders_data.append((user_id, pid, f"ORD{order_counter:04d}"))
             order_counter += 1
 
-    conn.executemany("INSERT INTO orders (user_id, product_id, order_id) VALUES (?, ?, ?)", orders_data)
+    cur.executemany("INSERT INTO orders (user_id, product_id, order_id) VALUES (%s, %s, %s)", orders_data)
 
     # ===== product_price 表：历史新低 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS product_price (
             id INTEGER,
-            ds TEXT,
-            price REAL
+            ds VARCHAR(10),
+            price DOUBLE
         )
     """)
 
@@ -119,7 +119,7 @@ def build(conn: sqlite3.Connection):
             base = min(base, price)  # 让价格有下降趋势
             product_price_data.append((pid, f"2024-04-{day:02d}", round(price, 2)))
 
-    conn.executemany("INSERT INTO product_price (id, ds, price) VALUES (?, ?, ?)", product_price_data)
+    cur.executemany("INSERT INTO product_price (id, ds, price) VALUES (%s, %s, %s)", product_price_data)
 
     print(f"     user_visits: {len(user_visits_data)} rows")
     print(f"     live_log: {len(live_log_data)} rows")

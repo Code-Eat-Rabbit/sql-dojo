@@ -1,16 +1,16 @@
 """Builder for Category 01: 连续登陆"""
 
-import sqlite3
 import random
 
 
-def build(conn: sqlite3.Connection):
+def build(conn):
     """创建表并插入练习数据"""
+    cur = conn.cursor()
     # ===== test 表：用户登录记录 =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS test (
             id INTEGER,
-            date TEXT
+            date VARCHAR(20)
         )
     """)
 
@@ -33,14 +33,14 @@ def build(conn: sqlite3.Connection):
         for d in days:
             test_data.append((user_id, d))
 
-    conn.executemany("INSERT INTO test (id, date) VALUES (?, ?)", test_data)
+    cur.executemany("INSERT INTO test (id, date) VALUES (%s, %s)", test_data)
 
     # ===== account 表：账户余额（拓展1） =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS account (
             user_id INTEGER,
-            date TEXT,
-            balance REAL
+            date VARCHAR(20),
+            balance DOUBLE
         )
     """)
 
@@ -52,18 +52,18 @@ def build(conn: sqlite3.Connection):
             bal += random.uniform(-100, 150)
             bal = max(0, bal)
             account_data.append((user_id, f"2024-02-{day:02d}", round(bal, 2)))
-    conn.executemany(
-        "INSERT INTO account (user_id, date, balance) VALUES (?, ?, ?)",
+    cur.executemany(
+        "INSERT INTO account (user_id, date, balance) VALUES (%s, %s, %s)",
         account_data
     )
 
     # ===== test_xiaoming 表：日期区间（拓展2） =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS test_xiaoming (
             id INTEGER,
-            name TEXT,
-            start_date TEXT,
-            end_date TEXT
+            name VARCHAR(128),
+            start_date VARCHAR(10),
+            end_date VARCHAR(10)
         )
     """)
 
@@ -75,17 +75,17 @@ def build(conn: sqlite3.Connection):
         (2, "小红", "2024-02-03", "2024-02-07"),
         (2, "小红", "2024-02-10", "2024-02-12"),
     ]
-    conn.executemany(
-        "INSERT INTO test_xiaoming (id, name, start_date, end_date) VALUES (?, ?, ?, ?)",
+    cur.executemany(
+        "INSERT INTO test_xiaoming (id, name, start_date, end_date) VALUES (%s, %s, %s, %s)",
         xm_data
     )
 
     # ===== games 表：胜负记录（拓展3） =====
-    conn.execute("""
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS games (
             user_id INTEGER,
-            date TEXT,
-            result TEXT
+            date VARCHAR(20),
+            result VARCHAR(128)
         )
     """)
 
@@ -94,8 +94,8 @@ def build(conn: sqlite3.Connection):
         for day in range(1, 16):
             result = random.choice(["win", "win", "win", "lose"])  # 75% 胜率
             game_data.append((user_id, f"2024-03-{day:02d}", result))
-    conn.executemany(
-        "INSERT INTO games (user_id, date, result) VALUES (?, ?, ?)",
+    cur.executemany(
+        "INSERT INTO games (user_id, date, result) VALUES (%s, %s, %s)",
         game_data
     )
 
