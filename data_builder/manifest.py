@@ -87,14 +87,36 @@ SELECT id, substr(date, 1, 10) AS date
 FROM test
 GROUP BY id, substr(date, 1, 10);
 
--- 步骤二：用 row_number 标记分组
+-- 步骤二：用 row_number 标记分组（日期减去行号，连续日期得到相同 date1）
+WITH numbered AS (
+    SELECT id, date,
+           ROW_NUMBER() OVER (PARTITION BY id ORDER BY date) AS rn
+    FROM (
+        SELECT id, SUBSTR(date, 1, 10) AS date
+        FROM test
+        GROUP BY id, SUBSTR(date, 1, 10)
+    ) dedup
+)
 SELECT id, date,
-       date_add(date, -ROW_NUMBER() OVER (PARTITION BY id ORDER BY date)) AS date1
-FROM (步骤一);
+       DATE_ADD(date, INTERVAL -rn DAY) AS date1
+FROM numbered;
 
 -- 步骤三：统计连续天数
+WITH numbered AS (
+    SELECT id, date,
+           ROW_NUMBER() OVER (PARTITION BY id ORDER BY date) AS rn
+    FROM (
+        SELECT id, SUBSTR(date, 1, 10) AS date
+        FROM test
+        GROUP BY id, SUBSTR(date, 1, 10)
+    ) dedup
+),
+flagged AS (
+    SELECT id, DATE_ADD(date, INTERVAL -rn DAY) AS date1
+    FROM numbered
+)
 SELECT id, date1, COUNT(*) AS day_cnt
-FROM (步骤二)
+FROM flagged
 GROUP BY id, date1
 HAVING COUNT(*) > 3;
 """,
@@ -158,7 +180,7 @@ FROM (
     SELECT id, date,
            LAG(date, 1) OVER (PARTITION BY id ORDER BY date) AS prev1,
            LAG(date, 2) OVER (PARTITION BY id ORDER BY date) AS prev2
-    FROM (SELECT id, substr(date,1,10) AS date FROM test GROUP BY id, substr(date,1,10))
+    FROM (SELECT id, substr(date,1,10) AS date FROM test GROUP BY id, substr(date,1,10)) AS d
 ) t
 WHERE DATEDIFF(date, prev1) = 1 AND DATEDIFF(prev1, prev2) = 1;
 
@@ -215,11 +237,19 @@ WITH filtered AS (
     SELECT user_id, date, balance
     FROM account
     WHERE balance > 1000
+),
+numbered AS (
+    SELECT user_id, date,
+           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY date) AS rn
+    FROM filtered
+),
+flagged AS (
+    SELECT user_id,
+           DATE_SUB(date, INTERVAL rn DAY) AS grp
+    FROM numbered
 )
-SELECT user_id,
-       date_sub(date, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY date)) AS grp,
-       COUNT(*) AS consecutive_days
-FROM filtered
+SELECT user_id, grp, COUNT(*) AS consecutive_days
+FROM flagged
 GROUP BY user_id, grp
 HAVING COUNT(*) > 1;
 """,
@@ -248,7 +278,7 @@ WITH t1 AS (
                WHEN DATE_ADD(LAG(end_date) OVER (PARTITION BY id, NAME ORDER BY start_date), INTERVAL 1 DAY) = start_date
                THEN 0 ELSE 1
            END AS new_group_flag
-    FROM mydb.test_xiaoming
+    FROM test_xiaoming
 ),
 t2 AS (
     SELECT id, NAME, start_date, end_date,
@@ -303,12 +333,15 @@ WITH marked AS (
            CASE WHEN result = 'win' AND LAG(result) OVER (PARTITION BY user_id ORDER BY date) = 'win'
                 THEN 0 ELSE 1 END AS new_streak
     FROM games
+),
+streaks AS (
+    SELECT user_id,
+           SUM(new_streak) OVER (PARTITION BY user_id ORDER BY date) AS streak_id
+    FROM marked
+    WHERE result = 'win'
 )
-SELECT user_id,
-       SUM(new_streak) OVER (PARTITION BY user_id ORDER BY date) AS streak_id,
-       COUNT(*) AS streak_len
-FROM marked
-WHERE result = 'win'
+SELECT user_id, streak_id, COUNT(*) AS streak_len
+FROM streaks
 GROUP BY user_id, streak_id;
 """,
                 tables=["games"],
@@ -681,13 +714,14 @@ English: Find products whose price today is an all-time low. Use `min() over()` 
                 reference_sql="""
 WITH min_so_far AS (
     SELECT id, ds, price,
-           MIN(price) OVER (PARTITION BY id ORDER BY ds) AS min_price_so_far
+           MIN(price) OVER (PARTITION BY id ORDER BY ds) AS min_price_so_far,
+           LAG(price) OVER (PARTITION BY id ORDER BY ds) AS prev_price
     FROM product_price
 )
 SELECT id, ds, price
 FROM min_so_far
 WHERE price = min_price_so_far
-  AND price < LAG(price) OVER (PARTITION BY id ORDER BY ds);
+  AND price < prev_price;
 """,
                 tables=["product_price"],
                 hints=[
@@ -721,12 +755,12 @@ WITH intervals AS (
                 THEN 1 ELSE 0 END AS new_group
     FROM raw_intervals
 ),
-groups AS (
+grouped AS (
     SELECT start, end, SUM(new_group) OVER (ORDER BY start) AS group_id
     FROM intervals
 )
 SELECT MIN(start) AS merged_start, MAX(end) AS merged_end
-FROM groups
+FROM grouped
 GROUP BY group_id;
 """,
                 tables=["raw_intervals"],
@@ -884,9 +918,10 @@ GROUP BY a.first_date;
 English: Given users with comma-separated tags, expand each tag into its own row (string-to-rows). Use recursive CTE in SQLite to simulate explode.
 """,
                 reference_sql="""
--- SQLite 中可以使用 recursive CTE 模拟 explode
+-- MySQL 8 用递归 CTE 模拟 explode（对应 Hive 的 lateral view explode）
+-- CAST 锚定列宽，避免递归部分 SUBSTR 结果被截断
 WITH RECURSIVE split(user_id, tag, rest) AS (
-    SELECT user_id, '', tags || ','
+    SELECT user_id, CAST('' AS CHAR(128)), CONCAT(tags, ',')
     FROM user_tags
     UNION ALL
     SELECT user_id,
@@ -916,7 +951,7 @@ English: Aggregate multiple rows per user back into a single row with concatenat
 """,
                 reference_sql="""
 SELECT user_id,
-       GROUP_CONCAT(tag, ',') AS tags
+       GROUP_CONCAT(tag SEPARATOR ',') AS tags
 FROM user_tag_rows
 GROUP BY user_id;
 """,
@@ -1017,28 +1052,28 @@ English: Design core HR data warehouse tables: employee dimension, department, s
                 reference_sql="""
 -- 员工表
 CREATE TABLE employee (
-    emp_id INTEGER PRIMARY KEY,
-    name TEXT,
-    dept_id INTEGER,
-    hire_date TEXT,
-    status TEXT
+    emp_id INT PRIMARY KEY,
+    name VARCHAR(128),
+    dept_id INT,
+    hire_date VARCHAR(10),
+    status VARCHAR(128)
 );
 
 -- 薪资表
 CREATE TABLE salary (
-    emp_id INTEGER,
-    month TEXT,
-    base_salary REAL,
-    bonus REAL,
+    emp_id INT,
+    month VARCHAR(7),
+    base_salary DOUBLE,
+    bonus DOUBLE,
     PRIMARY KEY (emp_id, month)
 );
 
 -- 考勤表
 CREATE TABLE attendance (
-    emp_id INTEGER,
-    date TEXT,
-    check_in TEXT,
-    check_out TEXT
+    emp_id INT,
+    date VARCHAR(10),
+    check_in VARCHAR(20),
+    check_out VARCHAR(20)
 );
 """,
                 tables=["employee", "salary", "attendance"],
@@ -1083,7 +1118,8 @@ English: Convert date strings to yyyyQn (quarter) format. Formula: (month-1)//3 
 """,
                 reference_sql="""
 SELECT date,
-       SUBSTR(date, 1, 4) || 'Q' || CAST((CAST(SUBSTR(date, 6, 2) AS INTEGER) - 1) / 3 + 1 AS TEXT) AS quarter
+       CONCAT(SUBSTR(date, 1, 4), 'Q',
+              (CAST(SUBSTR(date, 6, 2) AS UNSIGNED) - 1) DIV 3 + 1) AS quarter
 FROM date_table;
 """,
                 tables=["date_table"],
@@ -1190,26 +1226,28 @@ English: Summary of all date format conversions: year, month, quarter, half-year
                 difficulty=3,
                 tags=["json", "解析"],
                 description="""
-SQLite 中解析 JSON 字段的方法（使用 json_extract 等内置函数）。
+MySQL 8 中解析 JSON 字段的方法（JSON_EXTRACT 提取字段，JSON_TABLE 展开数组）。
 
-English: Parse JSON fields in SQLite using built-in functions: json_extract() to access keys, json_each() to expand arrays.
+English: Parse JSON fields in MySQL 8: JSON_EXTRACT() to access keys, JSON_TABLE() to expand arrays (the MySQL counterpart of Hive's explode).
 """,
                 reference_sql="""
--- SQLite 内置 JSON 函数
+-- MySQL 8 内置 JSON 函数
 SELECT id,
        JSON_EXTRACT(data, '$.name') AS name,
        JSON_EXTRACT(data, '$.age') AS age
-FROM json_table;
+FROM `json_table`;
 
--- 展开 JSON 数组
-SELECT id,
-       JSON_EACH.value AS item
-FROM json_table, JSON_EACH(json_table.data, '$.items');
+-- 展开 JSON 数组（JSON_TABLE 是 MySQL 8 表函数，对应 Hive 的 lateral view explode）
+SELECT jt.id,
+       items.item
+FROM `json_table` jt,
+     JSON_TABLE(jt.data, '$.items[*]'
+         COLUMNS (item VARCHAR(64) PATH '$')) AS items;
 """,
                 tables=["json_table"],
                 hints=[
-                    "json_extract(col, '$.key') 提取字段",
-                    "json_each(col, '$.array') 展开数组"
+                    "JSON_EXTRACT(col, '$.key') 提取字段",
+                    "JSON_TABLE(col, '$.array[*]' COLUMNS (...)) 展开数组"
                 ],
             ),
         ],
@@ -1232,23 +1270,19 @@ FROM json_table, JSON_EACH(json_table.data, '$.items');
 English: Solve the classic "Trapping Rain Water" algorithm problem in SQL. For each position, water = min(left_max, right_max) - height. Use MAX() over() for rolling maxima.
 """,
                 reference_sql="""
-WITH numbered AS (
-    SELECT ROW_NUMBER() OVER () AS idx, height
-    FROM heights
-),
-left_max AS (
+WITH left_max AS (
     SELECT idx, height,
            MAX(height) OVER (ORDER BY idx ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS lmax
-    FROM numbered
+    FROM heights
 ),
 right_max AS (
     SELECT idx, height, lmax,
            MAX(height) OVER (ORDER BY idx DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS rmax
     FROM left_max
 )
-SELECT SUM(MIN(lmax, rmax) - height) AS total_water
+SELECT SUM(LEAST(lmax, rmax) - height) AS total_water
 FROM right_max
-WHERE MIN(lmax, rmax) > height;
+WHERE LEAST(lmax, rmax) > height;
 """,
                 tables=["heights"],
                 hints=[
