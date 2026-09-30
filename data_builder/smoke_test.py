@@ -97,7 +97,7 @@ def main() -> int:
             kind = classify(prob.reference_sql)
             status = f"FAIL: {str(e)[:160]}"
         counts[kind] = counts.get(kind, 0) + 1
-        mark = "✓" if status == "ok" or status == "skip" else "✗"
+        mark = "✓" if status.startswith("ok") or status == "skip" else "✗"
         print(f"[{mark}] {prob.id:<6} {kind:<12} {status}")
         if mark == "✗":
             failures.append(prob.id)
