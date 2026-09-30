@@ -25,7 +25,7 @@ FORBIDDEN_PATTERNS = [
     (r"JSON_EACH", "SQLite JSON_EACH → 用 JSON_TABLE()"),
     (r"julianday|strftime|sqlite_master|AUTOINCREMENT", "SQLite 专属语法"),
     (r"\bmydb\.", "跨库前缀 mydb. → 去掉，题内表就在当前 schema"),
-    (r"GROUP_CONCAT\([^)]*,\s*'", "GROUP_CONCAT 双参分隔符 → 用 SEPARATOR"),
+    (r"GROUP_CONCAT\((?![^)]*SEPARATOR)[^)]*,\s*'", "GROUP_CONCAT 双参分隔符 → 用 SEPARATOR"),
 ]
 
 
