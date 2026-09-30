@@ -27,6 +27,8 @@
 - [ ] **步骤 1：编写 docker-compose.yml**
 
 ```yaml
+name: sql-dojo-mysql
+
 services:
   mysql:
     image: mysql:8.4
