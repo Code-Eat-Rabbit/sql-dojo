@@ -102,6 +102,10 @@ export function getDraft(id: string): Promise<DraftResponse> {
   return fetchJson<DraftResponse>(`${BASE}/problems/${encodeURIComponent(id)}/draft`)
 }
 
+export function resetProgress(): Promise<{ reset: boolean; cleared: number }> {
+  return fetchJson(`${BASE}/progress/reset`, { method: 'POST' })
+}
+
 export async function saveDraft(id: string, sql: string): Promise<void> {
   const res = await fetch(`${BASE}/problems/${encodeURIComponent(id)}/draft`, {
     method: 'PUT',

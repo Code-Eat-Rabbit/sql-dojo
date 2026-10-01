@@ -1,17 +1,29 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getCategories } from '../api'
+import { getCategories, resetProgress } from '../api'
+import ConfirmDialog from '../components/ConfirmDialog'
 import type { CategoryInfo, CategoryListResponse } from '../types'
 
-function GlobalProgressBar({ total, completed }: { total: number; completed: number }) {
+function GlobalProgressBar({
+  total,
+  completed,
+  actions,
+}: {
+  total: number
+  completed: number
+  actions?: React.ReactNode
+}) {
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0
   return (
     <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-lg font-semibold text-gray-800">Overall Progress</h2>
-        <span className="text-sm text-gray-500">
-          {completed} / {total} completed ({pct}%)
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-500">
+            {completed} / {total} completed ({pct}%)
+          </span>
+          {actions}
+        </div>
       </div>
       <div className="w-full bg-gray-200 rounded-full h-3">
         <div
@@ -80,12 +92,35 @@ export default function CategoryListPage() {
   const [data, setData] = useState<CategoryListResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showReset, setShowReset] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [resetNotice, setResetNotice] = useState<string | null>(null)
 
-  useEffect(() => {
+  const loadCategories = () => {
     getCategories()
       .then(setData)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
+  }
+
+  const handleReset = async () => {
+    setResetting(true)
+    try {
+      const r = await resetProgress()
+      setShowReset(false)
+      setResetNotice(`已重置 ${r.cleared} 题进度`)
+      setTimeout(() => setResetNotice(null), 3000)
+      loadCategories()
+    } catch (err) {
+      setShowReset(false)
+      setError(err instanceof Error ? err.message : '重置失败')
+    } finally {
+      setResetting(false)
+    }
+  }
+
+  useEffect(() => {
+    loadCategories()
   }, [])
 
   if (loading) {
@@ -111,7 +146,21 @@ export default function CategoryListPage() {
       <GlobalProgressBar
         total={data.global_stats.total}
         completed={data.global_stats.completed}
+        actions={
+          <button
+            onClick={() => setShowReset(true)}
+            className="px-3 py-1.5 text-xs border border-gray-300 text-gray-600 rounded-md hover:bg-gray-100 transition-colors"
+          >
+            重置进度
+          </button>
+        }
       />
+
+      {resetNotice && (
+        <div className="bg-green-50 border border-green-200 text-green-700 rounded-lg p-3 mb-4 text-sm">
+          {resetNotice}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {data.categories.map((cat) => (
@@ -124,6 +173,16 @@ export default function CategoryListPage() {
           No categories available yet.
         </div>
       )}
+
+      <ConfirmDialog
+        open={showReset}
+        title="重置全部进度"
+        message={'将清除所有分类的练习状态、完成次数、掌握度与笔记（不可恢复）。\nSQL 草稿会保留。\n是否继续？'}
+        confirmText="重置"
+        busy={resetting}
+        onConfirm={handleReset}
+        onClose={() => setShowReset(false)}
+      />
     </div>
   )
 }
