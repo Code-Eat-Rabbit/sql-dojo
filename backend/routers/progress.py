@@ -36,6 +36,24 @@ def compute_mastery(completed_count: int, manual_level: int,
     return result
 
 
+@router.post("/progress/reset")
+def reset_progress():
+    """Reset all practice progress; drafts and problems are preserved"""
+    conn = get_progress_connection()
+    try:
+        cleared = conn.execute(
+            "SELECT COUNT(*) AS n FROM progress"
+        ).fetchone()["n"]
+        conn.execute("DELETE FROM progress")
+        conn.execute(
+            "INSERT OR IGNORE INTO progress (problem_id) SELECT id FROM problems"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {"reset": True, "cleared": cleared}
+
+
 @router.post("/progress/{problem_id}")
 def complete_problem(problem_id: str, req: CompleteRequest):
     """Mark a problem as completed"""
