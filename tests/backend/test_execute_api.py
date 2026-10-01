@@ -12,16 +12,16 @@ pytestmark = pytest.mark.skipif(
 
 def test_execute_ok(client):
     r = client.post("/api/problems/01_01/execute",
-                    json={"sql": "SELECT id FROM test LIMIT 3"})
+                    json={"sql": "SELECT user_id FROM login_log LIMIT 3"})
     assert r.status_code == 200
     data = r.json()
-    assert data["columns"] == ["id"]
+    assert data["columns"] == ["user_id"]
     assert data["rowCount"] == 3
 
 
 def test_execute_rejects_write(client):
     r = client.post("/api/problems/01_01/execute",
-                    json={"sql": "DELETE FROM test"})
+                    json={"sql": "DELETE FROM login_log"})
     assert r.status_code == 400
     assert r.json()["detail"]["code"] == "forbidden_statement"
 

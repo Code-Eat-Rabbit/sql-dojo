@@ -17,8 +17,8 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_run_readonly_select():
-    r = run_readonly("01_continuous_login", "SELECT id FROM test LIMIT 3")
-    assert r["columns"] == ["id"]
+    r = run_readonly("01_continuous_login", "SELECT user_id FROM login_log LIMIT 3")
+    assert r["columns"] == ["user_id"]
     assert r["rowCount"] == 3
     assert len(r["rows"]) == 3
     assert r["truncated"] is False
@@ -43,7 +43,7 @@ def test_write_bypassing_whitelist_rejected_by_readonly():
     with pytest.raises(MysqlExecutionError) as ei:
         run_readonly(
             "01_continuous_login",
-            "WITH t AS (SELECT 1 AS x) UPDATE test SET id = id",
+            "WITH t AS (SELECT 1 AS x) UPDATE login_log SET user_id = user_id",
         )
     assert ei.value.mysql_code == 1792
     assert "只允许查询语句" in ei.value.message

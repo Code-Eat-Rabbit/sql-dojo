@@ -78,53 +78,53 @@ CATEGORIES: List[Category] = [
                 difficulty=2,
                 tags=["字节面试题", "row_number", "连续"],
                 description="""
-给定一张用户登录表 `test`，包含字段 `id`（用户ID）和 `date`（登录日期）。
+给定一张用户登录表 `login_log`，包含字段 `user_id`（用户ID）和 `login_date`（登录日期）。
 请查询连续登录 3 天以上的所有用户。
 
 **补充知识点：** 字段名相同不会覆盖，例如 `select a,a,a` 结果有三列。
 
-English: Given a user login table `test` with fields `id` (user ID) and `date` (login date), find all users who logged in for 3 or more consecutive days.
+English: Given a user login table `login_log` with fields `user_id` (user ID) and `login_date` (login date), find all users who logged in for 3 or more consecutive days.
 """,
                 reference_sql="""
 -- 步骤一：去重
-SELECT id, substr(date, 1, 10) AS date
-FROM test
-GROUP BY id, substr(date, 1, 10);
+SELECT user_id, substr(login_date, 1, 10) AS login_date
+FROM login_log
+GROUP BY user_id, substr(login_date, 1, 10);
 
 -- 步骤二：用 row_number 标记分组（日期减去行号，连续日期得到相同 date1）
 WITH numbered AS (
-    SELECT id, date,
-           ROW_NUMBER() OVER (PARTITION BY id ORDER BY date) AS rn
+    SELECT user_id, login_date,
+           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY login_date) AS rn
     FROM (
-        SELECT id, SUBSTR(date, 1, 10) AS date
-        FROM test
-        GROUP BY id, SUBSTR(date, 1, 10)
+        SELECT user_id, SUBSTR(login_date, 1, 10) AS login_date
+        FROM login_log
+        GROUP BY user_id, SUBSTR(login_date, 1, 10)
     ) dedup
 )
-SELECT id, date,
-       DATE_ADD(date, INTERVAL -rn DAY) AS date1
+SELECT user_id, login_date,
+       DATE_ADD(login_date, INTERVAL -rn DAY) AS date1
 FROM numbered;
 
 -- 步骤三：统计连续天数
 WITH numbered AS (
-    SELECT id, date,
-           ROW_NUMBER() OVER (PARTITION BY id ORDER BY date) AS rn
+    SELECT user_id, login_date,
+           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY login_date) AS rn
     FROM (
-        SELECT id, SUBSTR(date, 1, 10) AS date
-        FROM test
-        GROUP BY id, SUBSTR(date, 1, 10)
+        SELECT user_id, SUBSTR(login_date, 1, 10) AS login_date
+        FROM login_log
+        GROUP BY user_id, SUBSTR(login_date, 1, 10)
     ) dedup
 ),
 flagged AS (
-    SELECT id, DATE_ADD(date, INTERVAL -rn DAY) AS date1
+    SELECT user_id, DATE_ADD(login_date, INTERVAL -rn DAY) AS date1
     FROM numbered
 )
-SELECT id, date1, COUNT(*) AS day_cnt
+SELECT user_id, date1, COUNT(*) AS day_cnt
 FROM flagged
-GROUP BY id, date1
+GROUP BY user_id, date1
 HAVING COUNT(*) > 3;
 """,
-                tables=["test"],
+                tables=["login_log"],
                 hints=[
                     "思路：row_number() over() 减一下，再分组 count",
                     "步骤一先去重，步骤二用 date_add + row_number 创建分组标识",
@@ -145,29 +145,29 @@ English: Following the previous problem, find the maximum consecutive login days
                 reference_sql="""
 -- 承接 01_01 的思路：去重 → row_number 差值分组 → 按用户取最大连续天数
 WITH dedup AS (
-    SELECT id, SUBSTR(date, 1, 10) AS date
-    FROM test
-    GROUP BY id, SUBSTR(date, 1, 10)
+    SELECT user_id, SUBSTR(login_date, 1, 10) AS login_date
+    FROM login_log
+    GROUP BY user_id, SUBSTR(login_date, 1, 10)
 ),
 numbered AS (
-    SELECT id, date,
-           ROW_NUMBER() OVER (PARTITION BY id ORDER BY date) AS rn
+    SELECT user_id, login_date,
+           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY login_date) AS rn
     FROM dedup
 ),
 flagged AS (
-    SELECT id, DATE_ADD(date, INTERVAL -rn DAY) AS date1
+    SELECT user_id, DATE_ADD(login_date, INTERVAL -rn DAY) AS date1
     FROM numbered
 ),
 day_cnt AS (
-    SELECT id, date1, COUNT(*) AS day_cnt
+    SELECT user_id, date1, COUNT(*) AS day_cnt
     FROM flagged
-    GROUP BY id, date1
+    GROUP BY user_id, date1
 )
-SELECT id, MAX(day_cnt) AS max_day_cnt
+SELECT user_id, MAX(day_cnt) AS max_day_cnt
 FROM day_cnt
-GROUP BY id;
+GROUP BY user_id;
 """,
-                tables=["test"],
+                tables=["login_log"],
                 hints=[
                     "承接上一题的思路",
                     "在第三步基础上再套一层 max"
@@ -195,24 +195,24 @@ English: Solve "users who logged in 3+ consecutive days" using three different m
 -- （同 01_01）
 
 -- 方法2: lag()
-SELECT DISTINCT id
+SELECT DISTINCT user_id
 FROM (
-    SELECT id, date,
-           LAG(date, 1) OVER (PARTITION BY id ORDER BY date) AS prev1,
-           LAG(date, 2) OVER (PARTITION BY id ORDER BY date) AS prev2
-    FROM (SELECT id, substr(date,1,10) AS date FROM test GROUP BY id, substr(date,1,10)) AS d
+    SELECT user_id, login_date,
+           LAG(login_date, 1) OVER (PARTITION BY user_id ORDER BY login_date) AS prev1,
+           LAG(login_date, 2) OVER (PARTITION BY user_id ORDER BY login_date) AS prev2
+    FROM (SELECT user_id, substr(login_date,1,10) AS login_date FROM login_log GROUP BY user_id, substr(login_date,1,10)) AS d
 ) t
-WHERE DATEDIFF(date, prev1) = 1 AND DATEDIFF(prev1, prev2) = 1;
+WHERE DATEDIFF(login_date, prev1) = 1 AND DATEDIFF(prev1, prev2) = 1;
 
 -- 方法3: 自关联
-SELECT DISTINCT a.id
-FROM (SELECT id, substr(date,1,10) AS date FROM test GROUP BY id, substr(date,1,10)) a
-JOIN (SELECT id, substr(date,1,10) AS date FROM test GROUP BY id, substr(date,1,10)) b
-  ON a.id = b.id AND DATEDIFF(a.date, b.date) = 1
-JOIN (SELECT id, substr(date,1,10) AS date FROM test GROUP BY id, substr(date,1,10)) c
-  ON b.id = c.id AND DATEDIFF(b.date, c.date) = 1;
+SELECT DISTINCT a.user_id
+FROM (SELECT user_id, substr(login_date,1,10) AS login_date FROM login_log GROUP BY user_id, substr(login_date,1,10)) a
+JOIN (SELECT user_id, substr(login_date,1,10) AS login_date FROM login_log GROUP BY user_id, substr(login_date,1,10)) b
+  ON a.user_id = b.user_id AND DATEDIFF(a.login_date, b.login_date) = 1
+JOIN (SELECT user_id, substr(login_date,1,10) AS login_date FROM login_log GROUP BY user_id, substr(login_date,1,10)) c
+  ON b.user_id = c.user_id AND DATEDIFF(b.login_date, c.login_date) = 1;
 """,
-                tables=["test"],
+                tables=["login_log"],
                 hints=[
                     "三种方法核心都是找到连续日期",
                     "row_number 法最通用，建议重点掌握",
@@ -292,27 +292,27 @@ English: Given a set of date intervals (start_date, end_date), merge consecutive
 """,
                 reference_sql="""
 WITH t1 AS (
-    SELECT id, NAME, start_date, end_date,
-           LAG(end_date) OVER (PARTITION BY id, NAME ORDER BY start_date) AS lag_date,
+    SELECT user_id, NAME, start_date, end_date,
+           LAG(end_date) OVER (PARTITION BY user_id, NAME ORDER BY start_date) AS lag_date,
            CASE
-               WHEN DATE_ADD(LAG(end_date) OVER (PARTITION BY id, NAME ORDER BY start_date), INTERVAL 1 DAY) = start_date
+               WHEN DATE_ADD(LAG(end_date) OVER (PARTITION BY user_id, NAME ORDER BY start_date), INTERVAL 1 DAY) = start_date
                THEN 0 ELSE 1
            END AS new_group_flag
-    FROM test_xiaoming
+    FROM user_schedule
 ),
 t2 AS (
-    SELECT id, NAME, start_date, end_date,
-           SUM(new_group_flag) OVER (PARTITION BY id, NAME ORDER BY start_date) AS group_id
+    SELECT user_id, NAME, start_date, end_date,
+           SUM(new_group_flag) OVER (PARTITION BY user_id, NAME ORDER BY start_date) AS group_id
     FROM t1
 )
-SELECT id, NAME,
+SELECT user_id, NAME,
        MIN(start_date) AS start_date,
        MAX(end_date) AS end_date
 FROM t2
-GROUP BY id, NAME, group_id
-ORDER BY MIN(start_date), id, NAME;
+GROUP BY user_id, NAME, group_id
+ORDER BY MIN(start_date), user_id, NAME;
 """,
-                tables=["test_xiaoming"],
+                tables=["user_schedule"],
                 hints=[
                     "先判断相邻两行是否连续（lag 比较）",
                     "用 SUM(new_group_flag) 累加创建分组号",
@@ -446,9 +446,9 @@ English: Move the previous row's value and the next row's value into the current
 SELECT id, date, value,
        LAG(value) OVER (PARTITION BY id ORDER BY date) AS prev_value,
        LEAD(value) OVER (PARTITION BY id ORDER BY date) AS next_value
-FROM data_table;
+FROM metric_readings;
 """,
-                tables=["data_table"],
+                tables=["metric_readings"],
                 hints=[
                     "lag(col, 1) → 上一行",
                     "lead(col, 1) → 下一行",
@@ -1264,15 +1264,15 @@ English: Forward-fill missing (NULL) values with the most recent non-null value.
 WITH filled AS (
     SELECT id, date, value,
            CASE WHEN value IS NOT NULL THEN value
-                ELSE (SELECT t2.value FROM data_table t2
+                ELSE (SELECT t2.value FROM sparse_readings t2
                       WHERE t2.id = t1.id AND t2.date < t1.date AND t2.value IS NOT NULL
                       ORDER BY t2.date DESC LIMIT 1)
            END AS filled_value
-    FROM data_table t1
+    FROM sparse_readings t1
 )
 SELECT * FROM filled;
 """,
-                tables=["data_table"],
+                tables=["sparse_readings"],
                 hints=["用子查询查最近的非空值", "或递归 CTE 逐行填充"],
             ),
         ],
@@ -1404,9 +1404,9 @@ English: Convert date strings to yyyy format using SUBSTR.
 """,
                 reference_sql="""
 SELECT date, SUBSTR(date, 1, 4) AS year
-FROM date_table;
+FROM raw_dates;
 """,
-                tables=["date_table"],
+                tables=["raw_dates"],
                 hints=["标准日期用 strftime('%Y', date) 更通用"],
             ),
             Problem(
@@ -1424,9 +1424,9 @@ English: Convert date strings to yyyyQn (quarter) format. Formula: (month-1)//3 
 SELECT date,
        CONCAT(SUBSTR(date, 1, 4), 'Q',
               (CAST(SUBSTR(date, 6, 2) AS UNSIGNED) - 1) DIV 3 + 1) AS quarter
-FROM date_table;
+FROM raw_dates;
 """,
-                tables=["date_table"],
+                tables=["raw_dates"],
                 hints=["公式: (month-1)//3 + 1 得到季度号"],
             ),
             Problem(
@@ -1449,7 +1449,7 @@ English: Summary of all date format conversions: year, month, quarter, half-year
 -- last12m: 最近12个月（date >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)）
 -- last30d/60d/90d/180d: 类似，用 DATE_SUB
 """,
-                tables=["date_table"],
+                tables=["raw_dates"],
                 hints=["记住 substr + 算术的组合模式"],
             ),
         ],
@@ -1591,16 +1591,16 @@ English: Parse JSON fields in MySQL 8: JSON_EXTRACT() to access keys, JSON_TABLE
 SELECT id,
        JSON_EXTRACT(data, '$.name') AS name,
        JSON_EXTRACT(data, '$.age') AS age
-FROM `json_table`;
+FROM user_profiles;
 
 -- 展开 JSON 数组（JSON_TABLE 是 MySQL 8 表函数，对应 Hive 的 lateral view explode）
 SELECT jt.id,
        items.item
-FROM `json_table` jt,
+FROM user_profiles jt,
      JSON_TABLE(jt.data, '$.items[*]'
          COLUMNS (item VARCHAR(64) PATH '$')) AS items;
 """,
-                tables=["json_table"],
+                tables=["user_profiles"],
                 hints=[
                     "JSON_EXTRACT(col, '$.key') 提取字段",
                     "JSON_TABLE(col, '$.array[*]' COLUMNS (...)) 展开数组"
@@ -1630,7 +1630,7 @@ JSON_UNQUOTE 与 `->>` 用法示例：
 SELECT id,
        data->>'$.name'                         AS name,        -- 推荐：去引号
        JSON_UNQUOTE(JSON_EXTRACT(data, '$.name')) AS name_same  -- 等价长写法
-FROM `json_table`
+FROM user_profiles
 WHERE data->>'$.name' = 'alice';               -- 用 ->> 才能匹配上
 ```
 
@@ -1638,7 +1638,7 @@ JSON_TABLE 展开多字段（数组元素是对象时，COLUMNS 里逐字段声�
 
 ```sql
 SELECT jt.id, ord.order_id, ord.amount
-FROM `json_table` jt,
+FROM user_profiles jt,
      JSON_TABLE(jt.data, '$.orders[*]'
          COLUMNS (order_id VARCHAR(32) PATH '$.order_id',
                   amount      DECIMAL(10,2) PATH '$.amount')) AS ord;
@@ -1646,7 +1646,7 @@ FROM `json_table` jt,
 
 ## 易错点
 
-- 表名、列名不要叫 `json_table`——撞 MySQL 保留函数名，报语法错误。
+- 表名不要撞 MySQL 保留函数名（早期示例表名叫 json_table 会报语法错误，本题已改用 user_profiles）。
 - `JSON_EXTRACT` 返回带引号的 JSON 值，要文本需再套 `JSON_UNQUOTE` 或 `->>'$.key'`。
 - `->` 与 `->>` 一字之差：`->` 等价 JSON_EXTRACT（带引号），`->>` 才是提取 + 去引号。
 """,
