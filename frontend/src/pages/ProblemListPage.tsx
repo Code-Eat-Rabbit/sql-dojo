@@ -210,7 +210,7 @@ export default function ProblemListPage() {
       setDetail(d)
     } catch {
       // Revert on failure — reload from server
-      if (selectedId) loadDetail(selectedId)
+      if (selectedId) await loadDetail(selectedId)
       setError('判定正确但保存进度失败，请重新自评')
     }
   }
