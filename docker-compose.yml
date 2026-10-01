@@ -10,12 +10,9 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: practice
     volumes:
-      - mysql_data:/var/lib/mysql
+      - ./docker/mysql:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-uroot", "-ppractice"]
       interval: 5s
       timeout: 3s
       retries: 10
-
-volumes:
-  mysql_data:

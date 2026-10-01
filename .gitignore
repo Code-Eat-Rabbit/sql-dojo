@@ -8,6 +8,9 @@ dist/
 # Databases
 databases/*.db
 
+# Docker (MySQL bind mount data)
+docker/
+
 # Frontend
 frontend/node_modules/
 frontend/dist/
