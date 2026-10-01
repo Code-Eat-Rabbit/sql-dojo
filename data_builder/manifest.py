@@ -387,7 +387,7 @@ GROUP BY user_id, streak_id;
 | `dense_rank()` | 并列同号，下一个不跳 1,2,2,3 | 不跳号场景 |
 | `datediff(a, b)` | 返回 a-b 的天数 | 注意参数方向，是 a 减 b |
 | `date_add(d, n)` / `date_sub(d, n)` | 日期增减 n 天 | n 可为负数 |
-| `substr(date, 1, 10)` | 取日期部分（去时分秒） | 等价 `to_date()` |
+| `substr(date, 1, 10)` | 取日期部分（去时分秒） | 等价 `to_date()`（Hive/Spark；MySQL 无此函数，用 SUBSTR） |
 
 ## 易错点
 
@@ -919,6 +919,19 @@ GROUP BY group_id;
 | `JSON_TABLE(col, '$.items[*]' COLUMNS (...))` | MySQL 8 表函数，JSON 数组展开 | 需与主表逗号连用 |
 | 递归 CTE | `WITH RECURSIVE` 逐层拆字符串 | MySQL 8 无 lateral view 的替代 |
 
+JSON_TABLE 完整示例骨架（MySQL 8）：
+
+```sql
+SELECT t.user_id, jt.item
+FROM user_tags t,
+     JSON_TABLE(CONCAT('[', t.tags, ']'), '$[*]'
+         COLUMNS (item VARCHAR(64) PATH '$')) AS jt;
+```
+
+递归 CTE 思路（一句话）：锚定查询先给每行放全串，递归部分反复 `SUBSTR + INSTR` 截下第一个元素、把余串传给下一轮，直到余串为空——即模拟 explode。
+
+`lateral view` 位置规则展开：写法是 `FROM 表 [别名] lateral view explode(...) 别名 AS 列名`，必须紧跟它作用的表之后；多列同时炸裂可叠多个 lateral view（各产生一行，行数做笛卡尔积）。
+
 ## 易错点
 
 - `lateral view` 必须紧跟包含它的表之后（FROM 之后、WHERE 之前），写错位置直接语法报错。
@@ -1076,6 +1089,9 @@ GROUP BY a.first_date;
         knowledge="""## 解题思路
 
 - **N 日留存套路**：`min(date)` 定首活 → `left join` 第 N 天活跃 → `count(distinct)` 分子分母。先给每个用户打上首活日标签，再回头找他第 N 天是否出现。
+- **窗口法（可选替代）**：不必自关联 `min(date)`——先 `MIN(date) OVER (PARTITION BY user_id)` 给每行打上首活日列，再对 `date = DATE_ADD(首活日, INTERVAL N DAY)` 的行 `count(distinct)` 做分子；少一层 join，逻辑等价。
+- **首日定义口径**：先问清是"首活"（min(活跃日期)，本题口径）还是"注册"（单独的注册表/注册日）；口径不同分母完全不同，面试先确认口径再写 SQL 是加分项。
+- **多日留存公式展开**：次日/7 日/30 日留存同一套骨架，只换 INTERVAL——`left join b ON b.uid = a.uid AND b.date = a.首活日 + N 天`，`留存率 = count(distinct b.uid) / count(distinct a.uid)`；多天批量出结果时可对活跃表按 `DATEDIFF(date, 首活日)` 打 day_n 标签，一次 group by 首活日 + day_n 全出。
 
 ## 必背知识点
 
@@ -1084,11 +1100,31 @@ GROUP BY a.first_date;
 | `left join` | 保左表全量，右表缺失补 NULL | 保分母不丢（留存题关键） |
 | `count(distinct uid)` | 去重计数 | 留存分子分母都要去重 |
 | `date_add(首活日, N)` | 首活日加 N 天 | 与活跃日期精确匹配即次日/7日留存 |
+| `MIN(date) OVER (PARTITION BY uid)` | 每行附首活日列 | 窗口法核心，免自关联 |
+| `DATEDIFF(date, 首活日)` | 距首活天数 | 打 day_n 标签，批量出多日留存 |
+
+窗口法留存骨架（备查）：
+
+```sql
+SELECT first_date,
+       COUNT(DISTINCT user_id) AS day0_users,
+       COUNT(DISTINCT CASE WHEN date = DATE_ADD(first_date, INTERVAL 7 DAY)
+                           THEN user_id END) AS day7_users
+FROM (
+    SELECT user_id, date,
+           MIN(date) OVER (PARTITION BY user_id) AS first_date
+    FROM user_active
+) t
+GROUP BY first_date;
+```
+
+多日留存批量口径：对每行打 `day_n = DATEDIFF(date, first_date)`，再 `GROUP BY first_date, day_n` 透视出 day1/day7/day30 各列，避免逐个 INTERVAL 重复 join N 次。
 
 ## 易错点
 
 - 分母必须用 `left join` 不能用 `inner join`：inner join 会把没回流的新用户整行丢掉，留存率虚高。
 - 首活日要作为派生列先固化（子查询/CTE），不要在 join 条件里重复计算导致逻辑混乱。
+- "精确等于第 N 天"与"N 天内活跃过"是两种口径（经典 vs 宽口径），题目没说清时先确认。
 """,
     ),
     Category(
@@ -1164,10 +1200,27 @@ GROUP BY user_id;
 | `collect_list(col)` | 组内聚合为数组，保留重复 | Hive |
 | `collect_set(col)` | 组内聚合为数组，去重 | 与 collect_list 相对 |
 
+GROUP_CONCAT 完整语法示例（含组内排序与去重）：
+
+```sql
+SELECT user_id,
+       GROUP_CONCAT(DISTINCT tag ORDER BY tag SEPARATOR ',') AS tags
+FROM user_tag_rows
+GROUP BY user_id;
+```
+
+行转列 / 列转行对照示例表：
+
+| 原始（多行） | 展开方向 | 结果 |
+|---|---|---|
+| (u1, 'a') (u1, 'b') (u1, 'c') | 收缩（GROUP_CONCAT） | (u1, 'a,b,c') |
+| (u1, 'a,b,c') | 展开（explode/递归 CTE） | (u1, 'a') (u1, 'b') (u1, 'c') |
+
 ## 易错点
 
 - `GROUP_CONCAT` 默认有长度上限（`group_concat_max_len`），长结果会被截断。
 - `concat_ws` 跳过 NULL 但 `concat` 遇 NULL 返回 NULL——拼接用户数据优先 `concat_ws`。
+- `GROUP_CONCAT` 组内顺序不保证，要稳定输出必须显式 `ORDER BY`。
 """,
     ),
     Category(
@@ -1317,7 +1370,7 @@ CREATE TABLE attendance (
 
 ## 必背知识点
 
-| 概念/语法 | 语义 | 备注 |
+| 函数/语法 | 语义 | 备注 |
 |---|---|---|
 | 事实表 | 记录业务事件（可加、量大），外键指向维度 | 如薪资/考勤流水 |
 | 维度表 | 描述实体属性（如员工、部门） | 主键被事实表引用 |
@@ -1497,6 +1550,19 @@ English: Summary of all date format conversions: year, month, quarter, half-year
 | 千亿级 join 优化 | 小表广播 mapjoin / 分桶 bucket join / Bloom filter 预过滤 | 避免非等值 join 的笛卡尔放大 |
 | union all vs union | union all 保留全部（含重复）；union 去重触发 shuffle 代价高 | 进出场计数必须用 union all |
 
+追问话术示例（每条追问的标准回答方向，照这个结构展开）：
+
+- 被问"窗口函数 vs GROUP BY，什么时候必须用窗口"→ 回答方向：要"明细行 + 聚合列"并存（如累计、环比、组内排名）时只能用窗口；GROUP BY 会把明细压掉，举 sum() over 累计一例即可。
+- 被问"COUNT(DISTINCT) 为什么慢，怎么优化"→ 回答方向：成因是 distinct key 分布不均、单 reducer 聚合长尾；方案：先按弱维度 group by 预聚合打散，或两阶段 distinct（先组内去重再全局去重）。
+- 被问"千亿级 join 怎么优化"→ 回答方向：小表广播 mapjoin、分桶 bucket join 让同 key 数据同节点、Bloom filter 预过滤；核心都是避免全量 shuffle join。
+- 被问"union all 和 union 差在哪"→ 回答方向：union 去重要触发一次 shuffle + 去重代价，union all 直接拼接；能用 union all 的场景（如进出场 +1/-1 计数）绝不用 union。
+
+追问回答的通用三步结构（背下来套任何追问）：① 先复述问题成因（一句话定性）；② 给 2 个以上方案并点明各自适用场景/代价；③ 落到本题数据规模给一个推荐方案——展示"知道为什么"而不只是"知道怎么办"。
+
+完整示范（以数据倾斜为例）：
+
+> "这个慢的根因是某个 distinct key（如热门商品）占了大量行，聚合时全落到同一个 reducer 形成长尾。方案一是先按 user_id 等弱维度 group by 预聚合打散，方案二是两阶段 distinct。本题维度假定基数在千万级，我推荐方案一，代价是多一轮 job 但长尾消除。"
+
 ## 易错点
 
 - 追问回答要给"问题成因 + 两个以上方案"，只报函数名拿不到加分。
@@ -1553,11 +1619,36 @@ FROM `json_table` jt,
 | `JSON_EXTRACT(col, '$.key')` | 按 JSON 路径取值 | 路径语法 `'$.key'` |
 | `JSON_TABLE(col, '$.items[*]' COLUMNS (item VARCHAR(64) PATH '$'))` | 表函数：JSON 数组展开为行 | 语法骨架必背 |
 | JSON_TABLE 连用 | 是 MySQL 8 表函数，与主表**逗号**连用 | `FROM t, JSON_TABLE(...)` |
+| `JSON_UNQUOTE(JSON_EXTRACT(col, '$.key'))` | 去掉返回值的 JSON 引号，得纯文本 | 等价简写 `col->>'$.key'` |
+| `col->>'$.key'` | 提取 + 去引号一步到位（`->` 则仍带引号） | 结果可直接 `=` 字符串比较 |
+
+JSON_EXTRACT 返回类型注意：返回的是 **JSON 类型值**，字符串会带引号——`JSON_EXTRACT('{"a":"x"}', '$.a')` 得到 `"x"`（含双引号），与 `'x'` 比较永远不等；要文本必须 `JSON_UNQUOTE` 或用 `->>`。
+
+JSON_UNQUOTE 与 `->>` 用法示例：
+
+```sql
+SELECT id,
+       data->>'$.name'                         AS name,        -- 推荐：去引号
+       JSON_UNQUOTE(JSON_EXTRACT(data, '$.name')) AS name_same  -- 等价长写法
+FROM `json_table`
+WHERE data->>'$.name' = 'alice';               -- 用 ->> 才能匹配上
+```
+
+JSON_TABLE 展开多字段（数组元素是对象时，COLUMNS 里逐字段声明 PATH）：
+
+```sql
+SELECT jt.id, ord.order_id, ord.amount
+FROM `json_table` jt,
+     JSON_TABLE(jt.data, '$.orders[*]'
+         COLUMNS (order_id VARCHAR(32) PATH '$.order_id',
+                  amount      DECIMAL(10,2) PATH '$.amount')) AS ord;
+```
 
 ## 易错点
 
 - 表名、列名不要叫 `json_table`——撞 MySQL 保留函数名，报语法错误。
 - `JSON_EXTRACT` 返回带引号的 JSON 值，要文本需再套 `JSON_UNQUOTE` 或 `->>'$.key'`。
+- `->` 与 `->>` 一字之差：`->` 等价 JSON_EXTRACT（带引号），`->>` 才是提取 + 去引号。
 """,
     ),
     Category(
@@ -1645,7 +1736,7 @@ WHERE b.time = (SELECT MIN(time) FROM race_result WHERE time < a.time);
         ],
         knowledge="""## 解题思路
 
-- **接雨水**：每位储水 = `least(左滚动max, 右滚动max) - 当前高`，两侧 `max() over` 求出——正序扫一遍取左侧最高，倒序扫一遍取右侧最高。
+- **接雨水**：每位储水 = `least(左滚动max, 右滚动max) - 当前高`，两侧 `max() over` 求出——正序扫一遍取左侧最高，倒序扫一遍取右侧最高。注意右滚动 max 没有单独的"向后看"语法，需按时间倒序排列的窗口（`ORDER BY idx DESC`）实现。
 - **找相邻更快者**：非等值 join `b.time < a.time` + 取 `min`；更优解：`lag() over(order by time)` 一次扫描完成。
 
 ## 必背知识点
