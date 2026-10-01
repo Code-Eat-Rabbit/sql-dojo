@@ -19,6 +19,7 @@ export interface CategoryInfo {
   name: string
   db_file: string
   order: number
+  knowledge: string
   stats: {
     total: number
     completed: number

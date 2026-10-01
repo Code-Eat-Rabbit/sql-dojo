@@ -26,7 +26,7 @@ export function getCategories(): Promise<CategoryListResponse> {
 }
 
 export function getProblems(categoryId: string): Promise<{
-  category: { id: string; name: string; db_file: string; order: number } | null
+  category: { id: string; name: string; db_file: string; order: number; knowledge: string } | null
   problems: ProblemBrief[]
   stats: { total: number; completed: number }
 }> {

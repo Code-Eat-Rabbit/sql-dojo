@@ -5,6 +5,7 @@ import { getProblems, getProblemDetail, getProblemTables, completeProblem } from
 import type { ProblemBrief, ProblemDetail, TableInfo } from '../types'
 import SQLWorkspace from '../components/SQLWorkspace'
 import ResultTable from '../components/ResultTable'
+import KnowledgePanel from '../components/KnowledgePanel'
 
 /* ── Sub-components ── */
 
@@ -116,7 +117,9 @@ export default function ProblemListPage() {
   const { id: categoryId } = useParams<{ id: string }>()
 
   const [problems, setProblems] = useState<ProblemBrief[]>([])
-  const [categoryName, setCategoryName] = useState('')
+  const [category, setCategory] = useState<{
+    id: string; name: string; db_file: string; order: number; knowledge: string
+  } | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<ProblemDetail | null>(null)
   const [tables, setTables] = useState<TableInfo[]>([])
@@ -137,7 +140,7 @@ export default function ProblemListPage() {
     getProblems(categoryId)
       .then((data) => {
         setProblems(data.problems)
-        setCategoryName(data.category?.name || '')
+        setCategory(data.category)
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoadingList(false))
@@ -250,11 +253,15 @@ export default function ProblemListPage() {
   const progress = detail?.progress
 
   return (
-    <div className="flex gap-6 h-[calc(100vh-130px)]">
+    <div>
+      {category && (
+        <KnowledgePanel key={category.id} title={category.name} knowledge={category.knowledge} />
+      )}
+      <div className="flex gap-6 h-[calc(100vh-130px)]">
       {/* ── Left Sidebar ── */}
       <aside className="w-[300px] flex-shrink-0 bg-white rounded-lg shadow-sm overflow-hidden flex flex-col">
         <div className="p-4 border-b border-gray-100 bg-gray-50">
-          <h2 className="font-semibold text-gray-800 truncate">{categoryName || 'Problems'}</h2>
+          <h2 className="font-semibold text-gray-800 truncate">{category?.name || 'Problems'}</h2>
           <p className="text-xs text-gray-500 mt-1">{problems.length} problems</p>
         </div>
         <ul className="flex-1 overflow-y-auto custom-scrollbar">
@@ -467,6 +474,7 @@ export default function ProblemListPage() {
           </div>
         )}
       </section>
+      </div>
 
       {/* Rating Modal */}
       <RatingModal open={showRating} onClose={() => setShowRating(false)} onSubmit={handleComplete} />
