@@ -101,17 +101,17 @@
 
 ### Q1. 查询连续登陆3天以上的用户 `★★☆☆☆` `字节面试题`
 
-> 来源：项目题号 `01_01`　表：`test`
+> 来源：项目题号 `01_01`　表：`login_log`
 
 **表结构：**
 
-| id (INTEGER) | date (TEXT) |
+| user_id (INTEGER) | login_date (TEXT) |
 |---|---|
 | 1 | 2024-01-01 08:00:00 |
 | 1 | 2024-01-01 20:00:00 |
 | 1 | 2024-01-02 09:00:00 |
 
-给定一张用户登录表 `test`，包含字段 `id`（用户ID）和 `date`（登录日期）。
+给定一张用户登录表 `login_log`，包含字段 `user_id`（用户ID）和 `login_date`（登录日期）。
 请查询连续登录 3 天以上的所有用户。
 
 *提示：row_number() over() 减一下，再分组 count；先去重，再用 date_add + row_number 创建分组标识，最后按分组标识 count 筛选。*
@@ -124,47 +124,47 @@
 
 ```sql
 -- 步骤三：统计连续天数，筛选 > 3
-SELECT id, date1, COUNT(*) AS day_cnt
+SELECT user_id, date1, COUNT(*) AS day_cnt
 FROM (
     -- 步骤二：用 row_number 标记，date_add 减去 row_number 得分组键
-    SELECT id, date,
-           date_add(date, -ROW_NUMBER() OVER (PARTITION BY id ORDER BY date)) AS date1
+    SELECT user_id, login_date,
+           date_add(login_date, -ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY login_date)) AS date1
     FROM (
         -- 步骤一：按用户+日期去重（一天可能多次登录）
-        SELECT id, substr(date, 1, 10) AS date
-        FROM test
-        GROUP BY id, substr(date, 1, 10)
+        SELECT user_id, substr(login_date, 1, 10) AS login_date
+        FROM login_log
+        GROUP BY user_id, substr(login_date, 1, 10)
     ) t1
 ) t2
-GROUP BY id, date1
+GROUP BY user_id, date1
 HAVING COUNT(*) > 3;
 ```
 
 **3. 关键解析**：
 
-- `substr(date, 1, 10)` 将 datetime 截为日期（`'2024-01-01 08:00:00'` → `'2024-01-01'`）。Hive 可直接用 `to_date(date)` 替代。
-- `date_add(date, -ROW_NUMBER() ...)` 是核心：日期每天 +1，row_number 也 +1，作差后常数项抵消，连续段内差值恒定。
+- `substr(login_date, 1, 10)` 将 datetime 截为日期（`'2024-01-01 08:00:00'` → `'2024-01-01'`）。Hive 可直接用 `to_date(login_date)` 替代。
+- `date_add(login_date, -ROW_NUMBER() ...)` 是核心：日期每天 +1，row_number 也 +1，作差后常数项抵消，连续段内差值恒定。
 
 **4. 知识点延伸**：
 
 **变式 1：求每个用户连续登录的最大天数（01_02）**
 
 ```sql
-SELECT id, MAX(day_cnt) AS max_day_cnt
+SELECT user_id, MAX(day_cnt) AS max_day_cnt
 FROM (
-    SELECT id, date1, COUNT(*) AS day_cnt
+    SELECT user_id, date1, COUNT(*) AS day_cnt
     FROM (
-        SELECT id, date,
-               date_add(date, -ROW_NUMBER() OVER (PARTITION BY id ORDER BY date)) AS date1
+        SELECT user_id, login_date,
+               date_add(login_date, -ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY login_date)) AS date1
         FROM (
-            SELECT id, substr(date, 1, 10) AS date
-            FROM test
-            GROUP BY id, substr(date, 1, 10)
+            SELECT user_id, substr(login_date, 1, 10) AS login_date
+            FROM login_log
+            GROUP BY user_id, substr(login_date, 1, 10)
         ) t1
     ) t2
-    GROUP BY id, date1
+    GROUP BY user_id, date1
 ) t3
-GROUP BY id;
+GROUP BY user_id;
 ```
 
 **变式 2：账户余额 > 1000 的连续天数（01_05 外汇公司）**
@@ -186,7 +186,7 @@ HAVING COUNT(*) > 1;
 
 > 「先过滤后连续」顺序不能反——如果先做连续再过滤，会把余额 <= 1000 的间隔日也纳入连续段。
 
-**相关函数**：`date_sub(d, n)` 与 `date_add(d, -n)` 等价（负天数）。`GROUP BY id, date` 本身即去重——同一用户同一天只留一行。
+**相关函数**：`date_sub(d, n)` 与 `date_add(d, -n)` 等价（负天数）。`GROUP BY user_id, login_date` 本身即去重——同一用户同一天只留一行。
 
 **5. 面试追问**：
 
@@ -200,9 +200,9 @@ HAVING COUNT(*) > 1;
 
 ### Q2. 连续登录3天以上用户 — 三种方法汇总 `★★★☆☆` `方法汇总`
 
-> 来源：项目题号 `01_03`　表：`test`
+> 来源：项目题号 `01_03`　表：`login_log`
 
-**表结构**：同 Q1，`test(id INTEGER, date TEXT)`
+**表结构**：同 Q1，`login_log(user_id INTEGER, login_date TEXT)`
 
 用三种不同方法实现「查询连续登录 3 天以上的用户」：
 1. row_number() 法
@@ -222,39 +222,39 @@ HAVING COUNT(*) > 1;
 **方法 2：lag() 法**
 
 ```sql
-SELECT DISTINCT id
+SELECT DISTINCT user_id
 FROM (
-    SELECT id, date,
-           LAG(date, 1) OVER (PARTITION BY id ORDER BY date) AS prev1,
-           LAG(date, 2) OVER (PARTITION BY id ORDER BY date) AS prev2
+    SELECT user_id, login_date,
+           LAG(login_date, 1) OVER (PARTITION BY user_id ORDER BY login_date) AS prev1,
+           LAG(login_date, 2) OVER (PARTITION BY user_id ORDER BY login_date) AS prev2
     FROM (
-        SELECT id, substr(date, 1, 10) AS date
-        FROM test
-        GROUP BY id, substr(date, 1, 10)
+        SELECT user_id, substr(login_date, 1, 10) AS login_date
+        FROM login_log
+        GROUP BY user_id, substr(login_date, 1, 10)
     ) deduped
 ) t
-WHERE DATEDIFF(date, prev1) = 1 AND DATEDIFF(prev1, prev2) = 1;
+WHERE DATEDIFF(login_date, prev1) = 1 AND DATEDIFF(prev1, prev2) = 1;
 ```
 
 **方法 3：自关联法**
 
 ```sql
-SELECT DISTINCT a.id
+SELECT DISTINCT a.user_id
 FROM (
-    SELECT id, substr(date, 1, 10) AS date
-    FROM test
-    GROUP BY id, substr(date, 1, 10)
+    SELECT user_id, substr(login_date, 1, 10) AS login_date
+    FROM login_log
+    GROUP BY user_id, substr(login_date, 1, 10)
 ) a
 JOIN (
-    SELECT id, substr(date, 1, 10) AS date
-    FROM test
-    GROUP BY id, substr(date, 1, 10)
-) b ON a.id = b.id AND DATEDIFF(a.date, b.date) = 1
+    SELECT user_id, substr(login_date, 1, 10) AS login_date
+    FROM login_log
+    GROUP BY user_id, substr(login_date, 1, 10)
+) b ON a.user_id = b.user_id AND DATEDIFF(a.login_date, b.login_date) = 1
 JOIN (
-    SELECT id, substr(date, 1, 10) AS date
-    FROM test
-    GROUP BY id, substr(date, 1, 10)
-) c ON b.id = c.id AND DATEDIFF(b.date, c.date) = 1;
+    SELECT user_id, substr(login_date, 1, 10) AS login_date
+    FROM login_log
+    GROUP BY user_id, substr(login_date, 1, 10)
+) c ON b.user_id = c.user_id AND DATEDIFF(b.login_date, c.login_date) = 1;
 ```
 
 **3. 关键解析**：
@@ -355,29 +355,29 @@ GROUP BY user_id, streak_id;
 
 **区间合并：断点标记 + 累加分段的经典应用（01_06 集度面试题）**
 
-给定日期区间表 `test_xiaoming(id, name, start_date, end_date)`，合并连续或重叠的区间：
+给定日期区间表 `user_schedule(user_id, name, start_date, end_date)`，合并连续或重叠的区间：
 
 ```sql
 WITH t1 AS (
-    SELECT id, name, start_date, end_date,
-           LAG(end_date) OVER (PARTITION BY id, name ORDER BY start_date) AS lag_date,
+    SELECT user_id, name, start_date, end_date,
+           LAG(end_date) OVER (PARTITION BY user_id, name ORDER BY start_date) AS lag_date,
            CASE
-               WHEN date_add(LAG(end_date) OVER (PARTITION BY id, name ORDER BY start_date), 1) = start_date
+               WHEN date_add(LAG(end_date) OVER (PARTITION BY user_id, name ORDER BY start_date), 1) = start_date
                THEN 0 ELSE 1
            END AS new_group_flag
-    FROM test_xiaoming
+    FROM user_schedule
 ),
 t2 AS (
-    SELECT id, name, start_date, end_date,
-           SUM(new_group_flag) OVER (PARTITION BY id, name ORDER BY start_date) AS group_id
+    SELECT user_id, name, start_date, end_date,
+           SUM(new_group_flag) OVER (PARTITION BY user_id, name ORDER BY start_date) AS group_id
     FROM t1
 )
-SELECT id, name,
+SELECT user_id, name,
        MIN(start_date) AS start_date,
        MAX(end_date) AS end_date
 FROM t2
-GROUP BY id, name, group_id
-ORDER BY MIN(start_date), id, name;
+GROUP BY user_id, name, group_id
+ORDER BY MIN(start_date), user_id, name;
 ```
 
 > 此模式与 Q3 解法 2 同构：**「断点标记（CASE 0/1）+ SUM() OVER 累加分段」**。区别在于判定连续的条件——Q3 是"前一行也是 win"，01_06 是"前区间 end + 1 = 当前 start"。
@@ -444,7 +444,7 @@ FROM (
 SELECT id, date, value,
        LAG(value) OVER (PARTITION BY id ORDER BY date) AS prev_value,
        LEAD(value) OVER (PARTITION BY id ORDER BY date) AS next_value
-FROM data_table;
+FROM metric_readings;
 ```
 
 - `LAG(col, n, default)` 三参数：列名、偏移量（默认 1）、越界默认值（默认 NULL）。
@@ -920,7 +920,7 @@ GROUP BY group_id;
 
 ### Q11. 填补缺失值 `★★★☆☆` `缺失值` `lag` `填充`
 
-> 来源：项目题号 `09_02`　表：`data_table`
+> 来源：项目题号 `09_02`　表：`sparse_readings`
 
 | id | date       | value |
 |----|------------|-------|
@@ -946,12 +946,12 @@ WITH marked AS (
            MAX(CASE WHEN value IS NOT NULL THEN date END)
                OVER (PARTITION BY id ORDER BY date
                      ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS last_nn_date
-    FROM data_table
+    FROM sparse_readings
 )
 SELECT m.id, m.date, m.value,
        t.value AS filled_value
 FROM marked m
-LEFT JOIN data_table t
+LEFT JOIN sparse_readings t
   ON t.id = m.id AND t.date = m.last_nn_date;
 ```
 
@@ -960,11 +960,11 @@ LEFT JOIN data_table t
 > WITH filled AS (
 >     SELECT id, date, value,
 >            CASE WHEN value IS NOT NULL THEN value
->                 ELSE (SELECT t2.value FROM data_table t2
+>                 ELSE (SELECT t2.value FROM sparse_readings t2
 >                       WHERE t2.id = t1.id AND t2.date < t1.date AND t2.value IS NOT NULL
 >                       ORDER BY t2.date DESC LIMIT 1)
 >            END AS filled_value
->     FROM data_table t1
+>     FROM sparse_readings t1
 > )
 > SELECT * FROM filled;
 > ```
@@ -1341,7 +1341,7 @@ GROUP BY user_id;
 
 ### Q17. 日期格式汇总 `★★☆☆☆` `日期` `汇总`
 
-> 来源：项目题号 `11_03`　表：`date_table`
+> 来源：项目题号 `11_03`　表：`raw_dates`
 
 | date       |
 |------------|
@@ -1372,7 +1372,7 @@ SELECT date,
               cast((cast(substr(date,6,2) as int)-1) div 6 + 1 as string)) AS half,
        -- 年月：yyyy-MM
        substr(date, 1, 7)                                        AS ytm
-FROM date_table;
+FROM raw_dates;
 
 -- last 系列（滚动窗口）：
 -- 最近12个月：WHERE date >= date_sub(current_date, 365)
@@ -1407,7 +1407,7 @@ FROM date_table;
 
 ### Q18. JSON 解析系列 `★★★☆☆` `json` `解析`
 
-> 来源：项目题号 `13_01`　表：`json_table`
+> 来源：项目题号 `13_01`　表：`user_profiles`
 
 | id | data                                           |
 |----|------------------------------------------------|
@@ -1429,7 +1429,7 @@ FROM date_table;
 SELECT id,
        get_json_object(data, '$.name') AS name,
        get_json_object(data, '$.age')  AS age
-FROM json_table;
+FROM user_profiles;
 
 -- 展开 JSON 数组
 -- get_json_object 返回字符串如 '["a","b"]'，
@@ -1437,7 +1437,7 @@ FROM json_table;
 SELECT id,
        get_json_object(data, '$.name') AS name,
        trim(regexp_replace(raw_item, '["\\[\\]]', '')) AS item
-FROM json_table
+FROM user_profiles
 LATERAL VIEW EXPLODE(
     SPLIT(
         regexp_replace(
@@ -1474,12 +1474,12 @@ WHERE trim(raw_item) != '';
 > SELECT id,
 >        JSON_EXTRACT(data, '$.name') AS name,
 >        JSON_EXTRACT(data, '$.age') AS age
-> FROM `json_table`;
+> FROM user_profiles;
 >
 > -- 展开 JSON 数组（JSON_TABLE 是 MySQL 8 表函数，对应 Hive 的 lateral view explode）
 > SELECT jt.id,
 >        items.item
-> FROM `json_table` jt,
+> FROM user_profiles jt,
 >      JSON_TABLE(jt.data, '$.items[*]'
 >          COLUMNS (item VARCHAR(64) PATH '$')) AS items;
 > ```
