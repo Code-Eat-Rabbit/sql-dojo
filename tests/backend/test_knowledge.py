@@ -17,3 +17,10 @@ def test_categories_contain_knowledge(client):
     for c in cats:
         assert "knowledge" in c
         assert isinstance(c["knowledge"], str)
+
+
+def test_all_categories_have_knowledge_content(client):
+    cats = client.get("/api/categories").json()["categories"]
+    for c in cats:
+        assert "## 解题思路" in c["knowledge"], f"category {c['id']} 缺解题思路"
+        assert "## 必背知识点" in c["knowledge"], f"category {c['id']} 缺必背知识点"

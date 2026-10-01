@@ -371,6 +371,29 @@ GROUP BY user_id, streak_id;
                 ],
             ),
         ],
+        knowledge="""## 解题思路
+
+- **差值法（首选）**：去重 → `日期 - row_number()` 得分组键 → `GROUP BY` + `HAVING` 计数。连续日期减去递增行号会得到相同常量，即分组键。
+- **lag 法**：`lag` 取前 N-1 个日期，`datediff` 全差 1 则连续——每个日期都与它前面 N-1 天对齐比较。
+- **自关联法**：自关联 N 次（同表 join，a/b 别名），`datediff = 1` 逐级衔接。
+- **条件连续（连胜类）**：先筛出满足条件的行 → 双 `row_number` 差值分组，或 `lag + case` 造断点标记 + `sum() over` 累加分段。
+
+## 必背知识点
+
+| 函数/语法 | 语义 | 备注 |
+|---|---|---|
+| `row_number()` | 严格递增 1,2,3,4，并列也分先后 | 去重取一名 / 差值法分组键 |
+| `rank()` | 并列同号，下一个跳号 1,2,2,4 | 要名次跳号时用 |
+| `dense_rank()` | 并列同号，下一个不跳 1,2,2,3 | 不跳号场景 |
+| `datediff(a, b)` | 返回 a-b 的天数 | 注意参数方向，是 a 减 b |
+| `date_add(d, n)` / `date_sub(d, n)` | 日期增减 n 天 | n 可为负数 |
+| `substr(date, 1, 10)` | 取日期部分（去时分秒） | 等价 `to_date()` |
+
+## 易错点
+
+- 排号前**必须先去重**（按人 + 按天 GROUP BY）：同日多次登录会产生重复日期，打断连续判定。
+- `NOT IN` 子查询结果含 NULL 时整体返回空——规避：`NOT EXISTS` 或子查询加 `WHERE col IS NOT NULL`。
+""",
     ),
     Category(
         id="02",
@@ -455,6 +478,27 @@ FROM metrics;
                 ],
             ),
         ],
+        knowledge="""## 解题思路
+
+- **波峰波谷**：`lag` 取前值 + `lead` 取后值 + `case when` 三比较——同时大于（或小于）前后两行即为波峰（波谷）。
+- **环比变化率**：`lag` 取前值 → `(今 - 前) / 前` → `round` 保留位数。
+- **前后列转换**：`lag`/`lead` 取上/下一行的值"放到当前行当列用"，本质是把行间关系变成行内比较。
+
+## 必背知识点
+
+| 函数/语法 | 语义 | 备注 |
+|---|---|---|
+| `lag(col, n, default)` | 向上取第 n 行的 col 值 | default 可省，首行补 NULL/默认值 |
+| `lead(col, n, default)` | 向下取第 n 行的 col 值 | 与 lag 方向相反 |
+| `first_value(col)` | 窗口帧内第一个值 | 注意帧范围影响结果 |
+| `last_value(col)` | 窗口帧内最后一个值 | 默认帧不含后续行，易错 |
+| `OVER(PARTITION BY ... ORDER BY ...)` | 窗口结构：分组 + 组内排序 | lag/lead 必须配 ORDER BY |
+
+## 易错点
+
+- `lag`/`lead` 不写 `ORDER BY` 会报错或结果无意义。
+- `last_value` 默认帧是 `RANGE ... CURRENT ROW`，不含后续行——要取组尾须显式写 `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`。
+""",
     ),
     Category(
         id="03",
@@ -521,6 +565,26 @@ WHERE dr = 2;
                 ],
             ),
         ],
+        knowledge="""## 解题思路
+
+- **TopN**：`row_number()` 并列也分先后——每组取第一名时并列只留一个，天然去重。
+- **第 N 高**：`dense_rank() over(partition by ... order by ... desc)` 取 `= N`——并列不跳号，保证第 N 高语义正确。
+- **选型口诀**：要名次跳号用 `rank`；不跳号/取第 N 高用 `dense_rank`；TopN 去重用 `row_number`。
+
+## 必背知识点
+
+| 函数/语法 | 语义 | 备注 |
+|---|---|---|
+| `row_number()` | 严格递增 1,2,3,4（并列也分先后） | TopN 去重取一名 |
+| `rank()` | 并列同号，下一个跳号 1,2,2,4 | 要名次跳号时用 |
+| `dense_rank()` | 并列同号，下一个不跳 1,2,2,3 | 取第 N 高必用 |
+| `OVER(PARTITION BY ... ORDER BY ...)` | 分组 + 组内排序 | 排序方向决定"第 N 高/低" |
+
+## 易错点
+
+- 求"第 N 高"用 `row_number` 会把并列值拆成不同名次，导致漏解；必须用 `dense_rank`。
+- 对比"全体第 N"与"每组第 N"：不加 `PARTITION BY` 是全局排名，加了才是组内排名。
+""",
     ),
     Category(
         id="04",
@@ -779,6 +843,26 @@ WHERE price = min_price_so_far
                 ],
             ),
         ],
+        knowledge="""## 解题思路
+
+- **核心口诀**：`sum() over` 加 `ORDER BY` = 累计；不加 = 分组总量。
+- **同时在线**：进 +1 / 出 -1 → `union all` → `sum() over` 累加 → `max` 取峰值。事件按时间排序后累加差值即为瞬时在线人数。
+- **首次达标**：累计后 `where` 筛 + `min(日期)`——先算累计列，外层筛出达到阈值的行，再取最早日期。
+
+## 必背知识点
+
+| 函数/语法 | 语义 | 备注 |
+|---|---|---|
+| `sum/min/max/avg/count(col) OVER(...)` | 聚合开窗 | 加 ORDER BY = 累计；不加 = 分组总量 |
+| `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` | 明确框定累计范围（组首到当前行） | 显式写帧最稳 |
+| 默认帧规则 | 有 ORDER BY 为 `RANGE ... CURRENT ROW`；无 ORDER BY 为全组 | 同值会并入同一帧 |
+| ROWS vs RANGE | ROWS 按物理行；RANGE 按排序值（同值并入同一帧） | 日期去重后两者等价 |
+
+## 易错点
+
+- 同时在线题必须 `union all` 不能 `union`：`union` 去重会把同值 +1/-1 行合并，破坏计数。
+- 默认帧是 RANGE 时，排序列有重复值会把同值行并入同一帧，累计值跳变——需要逐行累计时显式用 `ROWS`。
+""",
     ),
     Category(
         id="05",
@@ -820,6 +904,26 @@ GROUP BY group_id;
                 ],
             ),
         ],
+        knowledge="""## 解题思路
+
+- **行转列（一行变多行）**：Hive 用 `lateral view explode(split(col, ','))`——先 split 成数组，再 explode 炸成多行。
+- **MySQL 8 替代**：用 `JSON_TABLE` 把数组展开为行，或递归 CTE 逐行拆分（见 13 系 JSON 题的语法骨架）。
+
+## 必背知识点
+
+| 函数/语法 | 语义 | 备注 |
+|---|---|---|
+| `split(s, ',')` | 按分隔符切分成数组 | Hive/Spark |
+| `explode` | 数组炸裂：一行变多行 | 每个数组元素一行 |
+| `lateral view` | 配合 explode 的表生成函数写法 | 位置在 FROM 之后、WHERE 之前 |
+| `JSON_TABLE(col, '$.items[*]' COLUMNS (...))` | MySQL 8 表函数，JSON 数组展开 | 需与主表逗号连用 |
+| 递归 CTE | `WITH RECURSIVE` 逐层拆字符串 | MySQL 8 无 lateral view 的替代 |
+
+## 易错点
+
+- `lateral view` 必须紧跟包含它的表之后（FROM 之后、WHERE 之前），写错位置直接语法报错。
+- 空串切分也会产生一行（split 空串得到一个元素的数组），展开前先过滤空值。
+""",
     ),
     Category(
         id="06",
@@ -909,6 +1013,26 @@ English: How to optimize mutual-follow queries at billion-row scale? Discussion 
                 ],
             ),
         ],
+        knowledge="""## 解题思路
+
+- **全称量词（每科都 > 60）**：双重否定——`not in`（存在不及格的学生）；或 `group by` + `having min(score) > 60`。"都满足" = "不存在不满足"。
+- **相互关注**：自关联 `a.from = b.to and a.to = b.from`；或 `union all` 双向展开 + `having count >= 2`。
+
+## 必背知识点
+
+| 函数/语法 | 语义 | 备注 |
+|---|---|---|
+| `inner join` | 只留两边都匹配的行 | 常规匹配 |
+| `left join` | 保左表全量，右表缺失补 NULL | 保分母不丢（留存题关键） |
+| `full outer join` | 两边全保 | MySQL 8 不直接支持，用 left+right union 模拟 |
+| 自关联 | 同表 join 两次（a/b 别名） | 用于"相互关注""日期衔接" |
+| 非等值 join | 条件是 `<`/`>` 等而非 `=` | 会数据放大，注意行数 |
+
+## 易错点
+
+- **NOT IN + NULL 陷阱**（面试高频）：子查询结果集含 NULL 时 `NOT IN` 整体返回空。规避：`NOT EXISTS` 或子查询加 `WHERE col IS NOT NULL`。
+- 全称量词别只 `having count(*) >= N`，要验证"不满足条件的行不存在"。
+""",
     ),
     Category(
         id="07",
@@ -949,6 +1073,23 @@ GROUP BY a.first_date;
                 ],
             ),
         ],
+        knowledge="""## 解题思路
+
+- **N 日留存套路**：`min(date)` 定首活 → `left join` 第 N 天活跃 → `count(distinct)` 分子分母。先给每个用户打上首活日标签，再回头找他第 N 天是否出现。
+
+## 必背知识点
+
+| 函数/语法 | 语义 | 备注 |
+|---|---|---|
+| `left join` | 保左表全量，右表缺失补 NULL | 保分母不丢（留存题关键） |
+| `count(distinct uid)` | 去重计数 | 留存分子分母都要去重 |
+| `date_add(首活日, N)` | 首活日加 N 天 | 与活跃日期精确匹配即次日/7日留存 |
+
+## 易错点
+
+- 分母必须用 `left join` 不能用 `inner join`：inner join 会把没回流的新用户整行丢掉，留存率虚高。
+- 首活日要作为派生列先固化（子查询/CTE），不要在 join 条件里重复计算导致逻辑混乱。
+""",
     ),
     Category(
         id="08",
@@ -1009,6 +1150,25 @@ GROUP BY user_id;
                 hints=["MySQL 用 GROUP_CONCAT(col SEPARATOR ',') 做字符串聚合"],
             ),
         ],
+        knowledge="""## 解题思路
+
+- **行转列（展开）**：见 05 系炸裂函数——Hive `lateral view explode(split(col, ','))`；MySQL 8 `JSON_TABLE` / 递归 CTE。
+- **列转行（收缩，多行并一行）**：MySQL 8 用 `GROUP_CONCAT(col SEPARATOR ',')`；Hive 用 `concat_ws(',', collect_list(col))`。
+
+## 必背知识点
+
+| 函数/语法 | 语义 | 备注 |
+|---|---|---|
+| `GROUP_CONCAT(col SEPARATOR ',')` | 组内多行拼成一个字符串 | MySQL 8；默认逗号，可自定义 SEPARATOR |
+| `concat_ws(',', col...)` | 用指定分隔符拼接，跳过 NULL | Hive/MySQL 通用 |
+| `collect_list(col)` | 组内聚合为数组，保留重复 | Hive |
+| `collect_set(col)` | 组内聚合为数组，去重 | 与 collect_list 相对 |
+
+## 易错点
+
+- `GROUP_CONCAT` 默认有长度上限（`group_concat_max_len`），长结果会被截断。
+- `concat_ws` 跳过 NULL 但 `concat` 遇 NULL 返回 NULL——拼接用户数据优先 `concat_ws`。
+""",
     ),
     Category(
         id="09",
@@ -1063,6 +1223,26 @@ SELECT * FROM filled;
                 hints=["用子查询查最近的非空值", "或递归 CTE 逐行填充"],
             ),
         ],
+        knowledge="""## 解题思路
+
+- **区间断点分段**：`lag(end)` 与当前 `start` 比较 → `case` 造 0/1 断点标志 → `sum() over` 累加成组号 → `min(start), max(end)` 按组合并。
+- **状态标记**：`lead` 取下一行时间作为当前状态的结束时间——把状态变化流转成 [开始, 结束) 区间。
+- **缺失值填充**：相关子查询取"最近的非空前值"（forward fill）；也可用 `last_value` 配显式帧。
+
+## 必背知识点
+
+| 函数/语法 | 语义 | 备注 |
+|---|---|---|
+| `lag(col) over(order by ...)` | 取前一行区间端点 | 区间断点比较的核心 |
+| `case when ... then 1 else 0 end` | 造断点标志 | 与 sum() over 累加配合 |
+| `sum(标志) over(order by ...)` | 标志累加 = 分段组号 | SUM 标志累加分段法 |
+| `lead(col) over(order by ...)` | 取下一行作为当前行区间结束 | 状态流转题常用 |
+
+## 易错点
+
+- 断点方向别搞反：`start > lag(end)` 说明出现间隙，要开新组；相等仍是同组。
+- `sum` 累加分段时 ORDER BY 必须与业务时间序一致，乱序会导致组号错乱。
+""",
     ),
     Category(
         id="10",
@@ -1130,6 +1310,27 @@ CREATE TABLE attendance (
                 hints=["标准数仓建模：事实表 + 维度表", "星型/雪花模型"],
             ),
         ],
+        knowledge="""## 解题思路
+
+- **建模题先答架构**：星型/雪花建模——事实表 + 维度表。员工是维度（employee），薪资、考勤是事实（salary/attendance 事实表）。
+- **递归 vs 开窗辨析**：先看能否用 `row_number/lag` + 聚合开窗的"分段子问题"套路解决（连续、分段、层级汇总大多可以）；真需要逐行传递状态（逐行 forward fill、树遍历）才用递归。面试先答开窗解法是加分项。
+
+## 必背知识点
+
+| 概念/语法 | 语义 | 备注 |
+|---|---|---|
+| 事实表 | 记录业务事件（可加、量大），外键指向维度 | 如薪资/考勤流水 |
+| 维度表 | 描述实体属性（如员工、部门） | 主键被事实表引用 |
+| 星型模型 | 维度表不拆分，事实表居中 | 查询少 join，数仓首选 |
+| 雪花模型 | 维度表继续拆分规范化 | 省 space 但 join 多 |
+| 缓慢变化维（SCD） | 维度属性随时间变化，用拉链表/版本号保留历史 | 一句话：保历史用拉链 |
+| `WITH RECURSIVE` | 逐行传递状态 / 树遍历 | 开窗解决不了再上 |
+
+## 易错点
+
+- 设计题不是纯 SQL 题：先讲分层（ODS/DWD/DWS）与模型，再落表结构，别上来就写建表语句。
+- 递归 CTE 要有终止条件（层级上限/状态收敛），否则死循环。
+""",
     ),
     Category(
         id="11",
@@ -1199,6 +1400,27 @@ English: Summary of all date format conversions: year, month, quarter, half-year
                 hints=["记住 substr + 算术的组合模式"],
             ),
         ],
+        knowledge="""## 解题思路
+
+- 核心套路是 `substr` + 算术组合：字符串截取拿年月，整数除法换算季度/半年。
+
+## 必背知识点
+
+| 函数/语法 | 语义 | 备注 |
+|---|---|---|
+| `substr(date, 1, 4)` | 取年 | year |
+| `substr(date, 6, 2)` | 取月 | mm |
+| `(month-1) DIV 3 + 1` | 季度公式 | 配 `concat(substr(date,1,4),'Q',...)` 拼出 2024Q1 |
+| `(m-1) DIV 6 + 1` | 半年公式 | H1/H2 |
+| `substr(date, 1, 7)` | 取年月 | ytm |
+| `date >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)` | last12m 滚动窗口 | last30d/60d/90d/180d 同理换 INTERVAL |
+| `last_day(d)` | 取月末 | 滚动窗口常用 |
+
+## 易错点
+
+- Hive 整除用 `div`（`/` 恒返回 double），MySQL 整除用 `DIV`——季度公式照抄要换方言。
+- Hive 的 `date_add(d, n)` 不是 `INTERVAL` 语法；MySQL 才写 `DATE_SUB(d, INTERVAL n DAY)`。
+""",
     ),
     Category(
         id="12",
@@ -1262,6 +1484,24 @@ English: Summary of all date format conversions: year, month, quarter, half-year
                 hints=["题目内容待从原始文档补充"],
             ),
         ],
+        knowledge="""## 解题思路
+
+- 本专题题目持续补充中（题目在题目描述里给出），先背下面这份**面试通用追问清单**，任何大厂原题都能挂靠。
+
+## 必背知识点
+
+| 追问 | 口诀 | 备注 |
+|---|---|---|
+| 窗口函数 vs GROUP BY | GROUP BY 压缩为每组一行；窗口函数保留每行、附加计算列 | 要"既有明细又有聚合"只能用窗口 |
+| COUNT(DISTINCT) 数据倾斜 | 先 `group by` 预聚合打散 / 两阶段 distinct | 单 reducer 聚合大维度是倾斜根源 |
+| 千亿级 join 优化 | 小表广播 mapjoin / 分桶 bucket join / Bloom filter 预过滤 | 避免非等值 join 的笛卡尔放大 |
+| union all vs union | union all 保留全部（含重复）；union 去重触发 shuffle 代价高 | 进出场计数必须用 union all |
+
+## 易错点
+
+- 追问回答要给"问题成因 + 两个以上方案"，只报函数名拿不到加分。
+- 数据倾斜先说"key 分布不均 → 单 reducer 长尾"，再说打散方案，逻辑链完整。
+""",
     ),
     Category(
         id="13",
@@ -1301,6 +1541,24 @@ FROM `json_table` jt,
                 ],
             ),
         ],
+        knowledge="""## 解题思路
+
+- **字段提取**：MySQL 8 用 `JSON_EXTRACT(col, '$.key')` 取 JSON 字段值。
+- **数组展开**：`JSON_TABLE` 把 JSON 数组炸成多行——对应 Hive 的 `lateral view explode`。
+
+## 必背知识点
+
+| 函数/语法 | 语义 | 备注 |
+|---|---|---|
+| `JSON_EXTRACT(col, '$.key')` | 按 JSON 路径取值 | 路径语法 `'$.key'` |
+| `JSON_TABLE(col, '$.items[*]' COLUMNS (item VARCHAR(64) PATH '$'))` | 表函数：JSON 数组展开为行 | 语法骨架必背 |
+| JSON_TABLE 连用 | 是 MySQL 8 表函数，与主表**逗号**连用 | `FROM t, JSON_TABLE(...)` |
+
+## 易错点
+
+- 表名、列名不要叫 `json_table`——撞 MySQL 保留函数名，报语法错误。
+- `JSON_EXTRACT` 返回带引号的 JSON 值，要文本需再套 `JSON_UNQUOTE` 或 `->>'$.key'`。
+""",
     ),
     Category(
         id="14",
@@ -1385,6 +1643,25 @@ WHERE b.time = (SELECT MIN(time) FROM race_result WHERE time < a.time);
                 hints=["题目内容待从原始文档补充"],
             ),
         ],
+        knowledge="""## 解题思路
+
+- **接雨水**：每位储水 = `least(左滚动max, 右滚动max) - 当前高`，两侧 `max() over` 求出——正序扫一遍取左侧最高，倒序扫一遍取右侧最高。
+- **找相邻更快者**：非等值 join `b.time < a.time` + 取 `min`；更优解：`lag() over(order by time)` 一次扫描完成。
+
+## 必背知识点
+
+| 函数/语法 | 语义 | 备注 |
+|---|---|---|
+| `max() over(order by ...)` | 滚动极值（到当前行为止的最大/最小） | 接雨水左右两侧最高墙 |
+| `least(a, b)` / `greatest(a, b)` | 多参取小/取大 | 左右 min 再减当前高 |
+| 非等值 join | `b.time < a.time` 之类条件 join | 会数据放大，注意行数 |
+| `lag() over(order by time)` | 取排序后的前一行 | 相邻比较优于 join 的原因 |
+
+## 易错点
+
+- 接雨水负值要过滤：两端位置储水为 0（`least - 高` 可能算出负数，外层套 `greatest(..., 0)` 或 case 过滤）。
+- 非等值 join 是 O(n²) 放大，数据大优先想 `lag` 单遍扫描方案。
+""",
     ),
 ]
 
