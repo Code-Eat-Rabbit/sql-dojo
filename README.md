@@ -23,7 +23,7 @@ SQL Dojo transforms a curated collection of **44 real SQL interview problems** (
 
 | | Typical online judge | SQL Dojo |
 |---|---|---|
-| **Practice environment** | Web-based SQL editor | **Your own DBeaver / DataGrip** |
+| **Practice environment** | Web-based SQL editor | **Built-in editor + your DBeaver for DDL & exploration** |
 | **Data visibility** | Hidden test cases | **Full table access, explore data freely** |
 | **Progress tracking** | Pass/fail counter | **Mastery rating + completion count + time decay** |
 | **Offline capability** | Requires internet | **Fully local — MySQL 8 running in Docker on your machine** |
@@ -83,9 +83,13 @@ cd frontend && npm install && npm run dev
 
 Open `http://localhost:5173` in your browser.
 
-### 4. Connect DBeaver
+### 4. Practice in the browser (or DBeaver)
 
-Open DBeaver → New Connection → MySQL → host 127.0.0.1, port 3306, user root, password practice, database <topic schema>. Write SQL, verify your results, then mark the problem as complete in the web dashboard.
+Write SQL in the built-in editor on each problem page and click **Run** — queries execute
+read-only against the topic schema in Docker MySQL. Click **Submit** to auto-grade your
+result against the reference solution (query problems only); a correct answer opens the
+mastery self-rating dialog. DDL problems and free exploration still work great in
+DBeaver (127.0.0.1:3306, root/practice) — connection info is shown on each problem page.
 
 The connection info (mysql CLI command + JDBC URL) is also displayed on each problem's detail page — click to copy.
 
