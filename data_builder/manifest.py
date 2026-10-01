@@ -22,6 +22,7 @@ class Problem:
         reference_sql: 参考答案（SQL 语句）。
         tables: 该题涉及的表名列表。
         hints: 解题提示列表。
+        ordered: 判题是否要求行顺序一致。
     """
     id: str                # "01_01"
     category_id: str       # "01"
@@ -32,6 +33,7 @@ class Problem:
     reference_sql: str     # 参考答案（SQL）
     tables: List[str]      # 该题用到的表名
     hints: List[str]
+    ordered: bool = False        # 判题是否要求行顺序一致（默认多重集比对）
 
 
 @dataclass

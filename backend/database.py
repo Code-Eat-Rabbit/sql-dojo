@@ -92,11 +92,28 @@ def init_progress_db():
                 notes TEXT DEFAULT '',
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS drafts (
+                problem_id TEXT PRIMARY KEY REFERENCES problems(id),
+                sql_text TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            );
         """)
+        # 老库幂等升级：problems 增加 gradable / ordered
+        for col in ("gradable", "ordered"):
+            try:
+                conn.execute(
+                    f"ALTER TABLE problems ADD COLUMN {col} "
+                    f"INTEGER NOT NULL DEFAULT 0")
+            except sqlite3.OperationalError:
+                pass  # 列已存在
 
 
 def seed_problems():
     """将 manifest.py 中的题目数据同步到 progress.db 的 problems 表"""
+    # 函数内导入：sql_executor 依赖本模块，顶层导入会循环
+    from backend.sql_executor import is_gradable_sql
+
     import sys
     original_path = sys.path.copy()
     sys.path.insert(0, str(BASE_DIR / "data_builder"))
@@ -111,16 +128,18 @@ def seed_problems():
                 conn.execute("""
                     INSERT OR REPLACE INTO problems
                         (id, category_id, title, difficulty, db_path, table_names,
-                         description, reference_sql, hints, tags)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         description, reference_sql, hints, tags, gradable, ordered)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     prob.id, prob.category_id, prob.title, prob.difficulty,
-                    cat.db_file[:-3],  # MySQL schema 名（列名沿用 db_path，避免迁移 progress.db）
+                    cat.db_file[:-3],  # MySQL schema 名（列名沿用 db_path）
                     json.dumps(prob.tables, ensure_ascii=False),
                     prob.description.strip(),
                     prob.reference_sql.strip(),
                     json.dumps(prob.hints, ensure_ascii=False),
                     json.dumps(prob.tags, ensure_ascii=False),
+                    1 if is_gradable_sql(prob.reference_sql) else 0,
+                    1 if prob.ordered else 0,
                 ))
                 # Ensure progress row exists
                 conn.execute("""
