@@ -25,3 +25,14 @@ def test_reset_clears_progress_keeps_drafts(client):
 
     # 草稿保留
     assert client.get("/api/problems/01_01/draft").json() == {"sql": "SELECT 1"}
+
+    # problems 表行数不变（种子数据不受重置影响）
+    import sqlite3
+    from backend.database import get_progress_connection
+
+    conn = get_progress_connection()
+    try:
+        n = conn.execute("SELECT COUNT(*) AS n FROM problems").fetchone()["n"]
+    finally:
+        conn.close()
+    assert n == 44

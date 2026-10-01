@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 export default function KnowledgePanel({
   title,
@@ -30,7 +31,7 @@ export default function KnowledgePanel({
       </button>
       {open && (
         <div className="px-4 pb-4 pt-3 border-t border-gray-100 prose prose-sm max-w-none text-sm text-gray-700">
-          <ReactMarkdown>{knowledge}</ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{knowledge}</ReactMarkdown>
         </div>
       )}
     </div>

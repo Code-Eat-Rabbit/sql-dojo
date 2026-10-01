@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { getProblems, getProblemDetail, getProblemTables, completeProblem } from '../api'
 import type { ProblemBrief, ProblemDetail, TableInfo } from '../types'
 import SQLWorkspace from '../components/SQLWorkspace'
@@ -364,7 +365,7 @@ export default function ProblemListPage() {
             <div className="mb-6">
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">Description</h3>
               <div className="prose text-sm text-gray-700">
-                <ReactMarkdown>{detail.description}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{detail.description}</ReactMarkdown>
               </div>
             </div>
 

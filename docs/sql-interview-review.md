@@ -259,7 +259,7 @@ JOIN (
 
 **3. 关键解析**：
 
-- 方法 2 用 `LAG(date, 1)` 和 `LAG(date, 2)` 取前两天，两个 `DATEDIFF` 全为 1 即连续三天。前两行 prev1/prev2 为 NULL 时 `DATEDIFF(date, NULL)` 结果为 NULL、不满足 `= 1` 自动排除，无需特殊处理。
+- 方法 2 用 `LAG(login_date, 1)` 和 `LAG(login_date, 2)` 取前两天，两个 `DATEDIFF` 全为 1 即连续三天。前两行 prev1/prev2 为 NULL 时 `DATEDIFF(login_date, NULL)` 结果为 NULL、不满足 `= 1` 自动排除，无需特殊处理。
 - 方法 3 三次自关联逐级 `DATEDIFF = 1` 衔接：a→b 差 1 天，b→c 差 1 天，即 a/b/c 连续三天。
 
 **4. 知识点延伸**：

@@ -1,4 +1,4 @@
-"""knowledge 字段：API 透传（内容在任务 3 填充）"""
+"""knowledge 字段：API 透传与内容结构"""
 
 
 def test_problem_list_category_contains_knowledge(client):
