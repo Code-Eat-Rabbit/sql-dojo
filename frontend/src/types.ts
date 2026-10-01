@@ -46,6 +46,7 @@ export interface ProblemDetail {
   tables: string[]
   hints: string[]
   progress: ProgressInfo | null
+  gradable: boolean
   db_file: string
   db_connection: string
   jdbc_url: string
@@ -85,4 +86,21 @@ export interface ProgressUpdateResponse {
   problem_id: string
   mastery_level: number
   notes: string | null
+}
+
+export interface SqlExecuteResult {
+  columns: string[]
+  rows: unknown[][]
+  rowCount: number
+  truncated: boolean
+  elapsedMs: number
+}
+
+export interface SqlSubmitResult {
+  correct: boolean
+  diffSummary: string | null
+}
+
+export interface DraftResponse {
+  sql: string
 }

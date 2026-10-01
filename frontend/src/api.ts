@@ -5,6 +5,9 @@ import type {
   TablesResponse,
   CompleteResponse,
   ProgressUpdateResponse,
+  SqlExecuteResult,
+  SqlSubmitResult,
+  DraftResponse,
 } from './types'
 
 const BASE = '/api'
@@ -64,4 +67,46 @@ export function updateProgress(
       body: JSON.stringify(data),
     }
   )
+}
+
+async function postSql<T>(path: string, body: { sql: string }): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    let message = `API error ${res.status}`
+    try {
+      const data = await res.json()
+      message = data?.detail?.message ?? data?.detail ?? message
+    } catch {
+      // 非 JSON 响应体，保留默认 message
+    }
+    const err = new Error(message) as Error & { status?: number }
+    err.status = res.status
+    throw err
+  }
+  return res.json()
+}
+
+export function executeSql(id: string, sql: string): Promise<SqlExecuteResult> {
+  return postSql(`/problems/${encodeURIComponent(id)}/execute`, { sql })
+}
+
+export function submitSql(id: string, sql: string): Promise<SqlSubmitResult> {
+  return postSql(`/problems/${encodeURIComponent(id)}/submit`, { sql })
+}
+
+export function getDraft(id: string): Promise<DraftResponse> {
+  return fetchJson<DraftResponse>(`${BASE}/problems/${encodeURIComponent(id)}/draft`)
+}
+
+export async function saveDraft(id: string, sql: string): Promise<void> {
+  const res = await fetch(`${BASE}/problems/${encodeURIComponent(id)}/draft`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sql }),
+  })
+  if (!res.ok) throw new Error(`API error ${res.status}`)
 }

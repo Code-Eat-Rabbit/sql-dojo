@@ -3,6 +3,8 @@ import { useParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import { getProblems, getProblemDetail, getProblemTables, completeProblem } from '../api'
 import type { ProblemBrief, ProblemDetail, TableInfo } from '../types'
+import SQLWorkspace from '../components/SQLWorkspace'
+import ResultTable from '../components/ResultTable'
 
 /* ── Sub-components ── */
 
@@ -363,42 +365,23 @@ export default function ProblemListPage() {
                         ({table.row_count} rows)
                       </span>
                     </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="bg-gray-50 text-left text-xs text-gray-500 uppercase">
-                            {table.columns.map((col) => (
-                              <th key={col.name} className="px-4 py-2 font-medium">
-                                {col.name}
-                                <span className="ml-1 text-gray-400 font-normal lowercase">{col.type}</span>
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {table.sample_rows.map((row, ri) => (
-                            <tr key={ri} className="border-t border-gray-100 hover:bg-gray-50">
-                              {table.columns.map((col) => (
-                                <td key={col.name} className="px-4 py-2 font-mono text-xs text-gray-600">
-                                  {String(row[col.name] ?? 'NULL')}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                          {table.sample_rows.length === 0 && (
-                            <tr>
-                              <td colSpan={table.columns.length} className="px-4 py-4 text-center text-gray-400 text-xs">
-                                No sample data
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
+                    <ResultTable
+                      columns={table.columns}
+                      rows={table.sample_rows.map((row) =>
+                        table.columns.map((c) => row[c.name] ?? null)
+                      )}
+                    />
                   </div>
                 ))}
               </div>
             )}
+
+            {/* SQL Workspace */}
+            <SQLWorkspace
+              problemId={detail.id}
+              gradable={detail.gradable}
+              onCorrect={() => setShowRating(true)}
+            />
 
             {/* Reference Answer */}
             {detail.reference_sql && (
