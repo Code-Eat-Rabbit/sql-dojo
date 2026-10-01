@@ -150,6 +150,7 @@ export default function ProblemListPage() {
     try {
       const [d, t] = await Promise.all([getProblemDetail(id), getProblemTables(id)])
       setDetail(d)
+      setError(null)
       setTables(t.tables)
       setDbConnection(t.db_connection)
       setJdbcUrl(t.jdbc_url)
@@ -210,6 +211,7 @@ export default function ProblemListPage() {
     } catch {
       // Revert on failure — reload from server
       if (selectedId) loadDetail(selectedId)
+      setError('判定正确但保存进度失败，请重新自评')
     }
   }
 
@@ -303,6 +305,12 @@ export default function ProblemListPage() {
 
         {detail && !loadingDetail && (
           <div>
+            {error && (
+              <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg p-3 mb-4 text-sm">
+                {error}
+              </div>
+            )}
+
             {/* Title + Tags */}
             <h1 className="text-2xl font-bold text-gray-900 mb-1">{detail.title}</h1>
             <div className="flex items-center gap-3 mb-4 text-sm text-gray-500">

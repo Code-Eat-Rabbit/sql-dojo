@@ -94,8 +94,8 @@ SQL Dojo 当前练习流程是"网页看题 → 在 DBeaver 等外部客户端�
 ```
 POST /api/problems/{id}/execute   body: {sql}
   → 200 {columns: string[], rows: array[], rowCount: int, truncated: bool, elapsedMs: int}
-  → 400 {error: {code, message}}   白名单拒绝 / 语法错误 / 只读违例
-  → 503 {error: {code, message}}   MySQL 未启动或 schema 不存在
+  → 400 {"detail": {code, message}}   白名单拒绝 / 语法错误 / 只读违例
+  → 503 {"detail": {code, message}}   MySQL 未启动或 schema 不存在
 
 POST /api/problems/{id}/submit    body: {sql}
   → 200 {correct: bool, diffSummary: string | null}
@@ -105,6 +105,8 @@ POST /api/problems/{id}/submit    body: {sql}
 GET  /api/problems/{id}/draft     → 200 {sql: string}
 PUT  /api/problems/{id}/draft     body: {sql} → 204
 ```
+
+错误响应遵循 FastAPI 惯例使用 detail 字段包裹 {code, message}。
 
 `rows` 为按列序的数组数组（非 DictCursor 的对象数组），与 `columns` 一一对应，判题比对也基于此。
 
