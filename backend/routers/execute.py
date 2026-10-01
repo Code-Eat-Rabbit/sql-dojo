@@ -22,12 +22,14 @@ router = APIRouter()
 
 def _load_problem(problem_id: str):
     conn = get_progress_connection()
-    row = conn.execute(
-        "SELECT id, db_path, reference_sql, gradable, ordered "
-        "FROM problems WHERE id = ?",
-        (problem_id,),
-    ).fetchone()
-    conn.close()
+    try:
+        row = conn.execute(
+            "SELECT id, db_path, reference_sql, gradable, ordered "
+            "FROM problems WHERE id = ?",
+            (problem_id,),
+        ).fetchone()
+    finally:
+        conn.close()
     if not row:
         raise HTTPException(status_code=404, detail="Problem not found")
     return row
@@ -87,10 +89,12 @@ def submit_sql(problem_id: str, req: SqlRequest):
 def get_draft(problem_id: str):
     _load_problem(problem_id)  # 404 校验
     conn = get_progress_connection()
-    row = conn.execute(
-        "SELECT sql_text FROM drafts WHERE problem_id = ?", (problem_id,)
-    ).fetchone()
-    conn.close()
+    try:
+        row = conn.execute(
+            "SELECT sql_text FROM drafts WHERE problem_id = ?", (problem_id,)
+        ).fetchone()
+    finally:
+        conn.close()
     return {"sql": row["sql_text"] if row else ""}
 
 
@@ -103,10 +107,12 @@ def put_draft(problem_id: str, req: DraftRequest):
             detail={"code": "sql_too_large", "message": "草稿超过 64KB 上限"},
         )
     conn = get_progress_connection()
-    conn.execute("""
-        INSERT OR REPLACE INTO drafts (problem_id, sql_text, updated_at)
-        VALUES (?, ?, CURRENT_TIMESTAMP)
-    """, (problem_id, req.sql))
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute("""
+            INSERT OR REPLACE INTO drafts (problem_id, sql_text, updated_at)
+            VALUES (?, ?, CURRENT_TIMESTAMP)
+        """, (problem_id, req.sql))
+        conn.commit()
+    finally:
+        conn.close()
     return Response(status_code=204)
