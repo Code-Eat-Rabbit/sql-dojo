@@ -6,17 +6,17 @@ import random
 def build(conn):
     """创建表并插入练习数据"""
     cur = conn.cursor()
-    # ===== test 表：用户登录记录 =====
+    # ===== login_log 表：用户登录记录 =====
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS test (
-            id INTEGER,
-            date VARCHAR(20)
+        CREATE TABLE IF NOT EXISTS login_log (
+            user_id INTEGER,
+            login_date VARCHAR(20)
         )
     """)
 
     # 生成数据：5 个用户，每人登录 8-15 天
     random.seed(42)
-    test_data = []
+    login_data = []
     for user_id in range(1, 6):
         days = []
         start_day = random.randint(1, 20)
@@ -31,9 +31,11 @@ def build(conn):
         if random.random() < 0.3:
             days.insert(random.randint(0, len(days)), random.choice(days))
         for d in days:
-            test_data.append((user_id, d))
+            login_data.append((user_id, d))
 
-    cur.executemany("INSERT INTO test (id, date) VALUES (%s, %s)", test_data)
+    cur.executemany(
+        "INSERT INTO login_log (user_id, login_date) VALUES (%s, %s)", login_data
+    )
 
     # ===== account 表：账户余额（拓展1） =====
     cur.execute("""
@@ -57,17 +59,17 @@ def build(conn):
         account_data
     )
 
-    # ===== test_xiaoming 表：日期区间（拓展2） =====
+    # ===== user_schedule 表：日期区间（拓展2） =====
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS test_xiaoming (
-            id INTEGER,
+        CREATE TABLE IF NOT EXISTS user_schedule (
+            user_id INTEGER,
             name VARCHAR(128),
             start_date VARCHAR(10),
             end_date VARCHAR(10)
         )
     """)
 
-    xm_data = [
+    schedule_data = [
         (1, "小明", "2024-01-01", "2024-01-05"),
         (1, "小明", "2024-01-06", "2024-01-10"),
         (1, "小明", "2024-01-15", "2024-01-20"),
@@ -76,8 +78,9 @@ def build(conn):
         (2, "小红", "2024-02-10", "2024-02-12"),
     ]
     cur.executemany(
-        "INSERT INTO test_xiaoming (id, name, start_date, end_date) VALUES (%s, %s, %s, %s)",
-        xm_data
+        "INSERT INTO user_schedule (user_id, name, start_date, end_date) "
+        "VALUES (%s, %s, %s, %s)",
+        schedule_data
     )
 
     # ===== games 表：胜负记录（拓展3） =====
@@ -99,7 +102,7 @@ def build(conn):
         game_data
     )
 
-    print(f"     test: {len(test_data)} rows")
+    print(f"     login_log: {len(login_data)} rows")
     print(f"     account: {len(account_data)} rows")
-    print(f"     test_xiaoming: {len(xm_data)} rows")
+    print(f"     user_schedule: {len(schedule_data)} rows")
     print(f"     games: {len(game_data)} rows")

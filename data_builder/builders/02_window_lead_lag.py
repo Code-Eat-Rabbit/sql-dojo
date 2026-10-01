@@ -26,23 +26,23 @@ def build(conn):
 
     cur.executemany("INSERT INTO stock_price (id, ds, price) VALUES (%s, %s, %s)", stock_data)
 
-    # ===== data_table 表：前后列转换 =====
+    # ===== metric_readings 表：前后列转换 =====
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS data_table (
+        CREATE TABLE IF NOT EXISTS metric_readings (
             id INTEGER,
             date VARCHAR(20),
             value DOUBLE
         )
     """)
 
-    data_table_data = []
+    metric_readings_data = []
     for group_id in range(1, 4):
         base = random.uniform(10, 100)
         for day in range(1, 9):
             value = base + random.uniform(-10, 10)
-            data_table_data.append((group_id, f"2024-02-{day:02d}", round(value, 2)))
+            metric_readings_data.append((group_id, f"2024-02-{day:02d}", round(value, 2)))
 
-    cur.executemany("INSERT INTO data_table (id, date, value) VALUES (%s, %s, %s)", data_table_data)
+    cur.executemany("INSERT INTO metric_readings (id, date, value) VALUES (%s, %s, %s)", metric_readings_data)
 
     # ===== metrics 表：变化率计算 =====
     cur.execute("""
@@ -62,5 +62,5 @@ def build(conn):
     cur.executemany("INSERT INTO metrics (date, value) VALUES (%s, %s)", metrics_data)
 
     print(f"     stock_price: {len(stock_data)} rows")
-    print(f"     data_table: {len(data_table_data)} rows")
+    print(f"     metric_readings: {len(metric_readings_data)} rows")
     print(f"     metrics: {len(metrics_data)} rows")

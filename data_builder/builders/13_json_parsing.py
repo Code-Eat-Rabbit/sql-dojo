@@ -6,9 +6,9 @@ import random
 
 def build(conn):
     cur = conn.cursor()
-    # ===== json_table 表：含 JSON 字段（表名撞 MySQL 8 保留函数 JSON_TABLE，需反引号） =====
+    # ===== user_profiles 表：含 JSON 字段 =====
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS `json_table` (
+        CREATE TABLE IF NOT EXISTS user_profiles (
             id INTEGER,
             data TEXT
         )
@@ -29,6 +29,6 @@ def build(conn):
         }
         json_data.append((i + 1, json.dumps(obj, ensure_ascii=False)))
 
-    cur.executemany("INSERT INTO `json_table` (id, data) VALUES (%s, %s)", json_data)
+    cur.executemany("INSERT INTO user_profiles (id, data) VALUES (%s, %s)", json_data)
 
-    print(f"     json_table: {len(json_data)} rows")
+    print(f"     user_profiles: {len(json_data)} rows")

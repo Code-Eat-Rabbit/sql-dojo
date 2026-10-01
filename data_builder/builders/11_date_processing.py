@@ -5,9 +5,9 @@ import random
 
 def build(conn):
     cur = conn.cursor()
-    # ===== date_table 表：各种日期格式 =====
+    # ===== raw_dates 表：各种日期格式 =====
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS date_table (
+        CREATE TABLE IF NOT EXISTS raw_dates (
             date VARCHAR(10)
         )
     """)
@@ -24,6 +24,6 @@ def build(conn):
 
     # 确保有重复月份用于测试
     date_data = list(set(date_data))
-    cur.executemany("INSERT INTO date_table (date) VALUES (%s)", date_data)
+    cur.executemany("INSERT INTO raw_dates (date) VALUES (%s)", date_data)
 
-    print(f"     date_table: {len(date_data)} rows")
+    print(f"     raw_dates: {len(date_data)} rows")
