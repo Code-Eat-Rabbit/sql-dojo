@@ -86,3 +86,11 @@ class ProgressSummary(BaseModel):
 class DbConnectionResponse(BaseModel):
     db_file: str
     connection_string: str
+
+
+class SqlRequest(BaseModel):
+    sql: str
+
+
+class DraftRequest(BaseModel):
+    sql: str = ""

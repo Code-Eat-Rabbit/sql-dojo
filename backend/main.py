@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
-from backend.routers import categories, problems, progress, databases
+from backend.routers import categories, problems, progress, databases, execute
 
 app = FastAPI(title="SQL Practice Platform", version="1.0.0")
 
@@ -24,6 +24,7 @@ app.include_router(categories.router, prefix="/api")
 app.include_router(problems.router, prefix="/api")
 app.include_router(progress.router, prefix="/api")
 app.include_router(databases.router, prefix="/api")
+app.include_router(execute.router, prefix="/api")
 
 
 @app.get("/api/health")
