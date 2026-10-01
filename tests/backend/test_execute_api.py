@@ -67,3 +67,8 @@ def test_draft_roundtrip(client):
     r = client.put("/api/problems/01_01/draft", json={"sql": "SELECT 1"})
     assert r.status_code == 204
     assert client.get("/api/problems/01_01/draft").json() == {"sql": "SELECT 1"}
+
+
+def test_problem_detail_includes_gradable(client):
+    assert client.get("/api/problems/01_01").json()["gradable"] is True
+    assert client.get("/api/problems/10_02").json()["gradable"] is False

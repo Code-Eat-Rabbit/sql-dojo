@@ -120,6 +120,7 @@ def get_problem(problem_id: str):
             "mastery_level": row["mastery_level"] or 0,
             "last_practiced_at": row["last_practiced_at"],
         },
+        "gradable": bool(row["gradable"]),
         "db_file": row["db_path"],
         "db_connection": mysql_cli_command(row["db_path"]),
         "jdbc_url": mysql_jdbc_url(row["db_path"]),

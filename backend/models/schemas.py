@@ -49,6 +49,7 @@ class ProblemDetail(BaseModel):
     tables: List[str]
     hints: List[str]
     progress: Optional[ProgressInfo]
+    gradable: bool = False
     db_file: str
     db_connection: str  # DBeaver connection string
 
