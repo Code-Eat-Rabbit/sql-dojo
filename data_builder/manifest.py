@@ -46,12 +46,14 @@ class Category:
         db_file: 专题标识文件名（去掉 .db 后缀即 MySQL schema 名）。
         order: 排序序号。
         problems: 该专题包含的题目列表。
+        knowledge: 分类知识点 Markdown，列表页顶部展示。
     """
     id: str
     name: str
     db_file: str           # "01_continuous_login.db"
     order: int
     problems: List[Problem]
+    knowledge: str = ""    # 分类知识点（Markdown：解题思路/必背知识点/易错点）
 
 
 # ============================================================

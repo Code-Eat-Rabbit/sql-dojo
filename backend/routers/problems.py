@@ -68,6 +68,7 @@ def list_problems(category_id: str = Query(None)):
             "name": cat.name if cat else "",
             "db_file": cat.db_file if cat else "",
             "order": cat.order if cat else 0,
+            "knowledge": cat.knowledge if cat else "",
         } if cat else None,
         "problems": problems,
         "stats": {

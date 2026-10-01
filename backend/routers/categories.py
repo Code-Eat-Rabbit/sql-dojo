@@ -40,6 +40,7 @@ def list_categories():
             "name": cat.name if cat else row["category_id"],
             "db_file": cat.db_file if cat else "",
             "order": cat.order if cat else 99,
+            "knowledge": cat.knowledge if cat else "",
             "stats": {
                 "total": row["total"],
                 "completed": row["completed"],
