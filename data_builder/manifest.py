@@ -1673,9 +1673,9 @@ SELECT * FROM filled;
                 difficulty=4,
                 tags=["递归", "开窗", "误导"],
                 description="""
-一些看似需要递归但实际可以用开窗函数解决的题目。典型场景：计算连续值、层级汇总等。
+本题暂不可作答。
 
-English: Problems that appear to require recursive CTEs but can actually be solved more elegantly with window functions. Typical scenarios: consecutive values, hierarchical summaries.
+一些看似需要递归但实际可以用开窗函数解决的题目。典型场景：计算连续值、层级汇总等。
 """,
                 reference_sql="""
 -- 示例：计算树形结构中的节点深度（以为要递归，实则可用路径排序）
@@ -1691,9 +1691,15 @@ English: Problems that appear to require recursive CTEs but can actually be solv
                 difficulty=3,
                 tags=["数仓", "表格设计", "人事"],
                 description="""
-设计人事数仓核心表结构：员工表、部门表、薪资表、考勤表。
+## 交付
 
-English: Design core HR data warehouse tables: employee dimension, department, salary fact, attendance fact. Follow star/snowflake schema best practices.
+写出下面三张表的建表语句。不要求查询结果，也不要求单独的部门表。
+
+表 `employee`：`emp_id`（主键）、`name`、`dept_id`、`hire_date`、`status`。
+
+表 `salary`：`emp_id`、`month`、`base_salary`、`bonus`。主键为 (`emp_id`, `month`)。
+
+表 `attendance`：`emp_id`、`date`、`check_in`、`check_out`。
 """,
                 reference_sql="""
 -- 员工表
@@ -1761,9 +1767,22 @@ CREATE TABLE attendance (
                 difficulty=2,
                 tags=["日期", "year", "格式化"],
                 description="""
-将日期转换为 yyyy 格式。
+## 数据
 
-English: Convert date strings to yyyy format using SUBSTR.
+表 `raw_dates`：`date`（日期字符串，形如 `2024-03-15`）。
+
+## 口径
+
+为每一行取出 `date` 的前 4 个字符作为年份。
+
+## 输出
+
+2 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| date | 原始日期 |
+| year | 年份，日期的前 4 个字符 |
 """,
                 reference_sql="""
 SELECT date, SUBSTR(date, 1, 4) AS year
@@ -1779,9 +1798,22 @@ FROM raw_dates;
                 difficulty=2,
                 tags=["日期", "季度"],
                 description="""
-将日期转换为 yyyyQn 格式（季度）。
+## 数据
 
-English: Convert date strings to yyyyQn (quarter) format. Formula: (month-1)//3 + 1.
+表 `raw_dates`：`date`（日期字符串，形如 `2024-03-15`）。
+
+## 口径
+
+为每一行生成季度标签：年份（前 4 个字符）拼接 `Q` 与季度号。季度号为 `(月 - 1) DIV 3 + 1`，月份取 `date` 第 6 位起的 2 个字符。结果形如 `2024Q1`。
+
+## 输出
+
+2 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| date | 原始日期 |
+| quarter | 季度标签，形如 `2024Q1` |
 """,
                 reference_sql="""
 SELECT date,
@@ -1799,9 +1831,9 @@ FROM raw_dates;
                 difficulty=2,
                 tags=["日期", "汇总"],
                 description="""
-汇总所有日期格式转换的代码：year, mm, quarter, half, h2t1, ytm, last*系列。
+本题暂不可作答。
 
-English: Summary of all date format conversions: year, month, quarter, half-year, YYYYMM, last12m, last30d/60d/90d/180d.
+汇总所有日期格式转换的代码：year, mm, quarter, half, h2t1, ytm, last*系列。
 """,
                 reference_sql="""
 -- year:  SUBSTR(date, 1, 4)

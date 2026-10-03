@@ -143,3 +143,30 @@ def test_category_07_08_09_statements():
         ["id", "date", "value", "filled_value"],
         ["filled_value"],
     )
+
+
+def test_category_10_11_statements():
+    _assert_unsolvable(
+        "10_01",
+        "一些看似需要递归但实际可以用开窗函数解决的题目。典型场景：计算连续值、层级汇总等。",
+    )
+    text = get_problem("10_02").description.strip()
+    assert "## 输出" not in text
+    assert "English:" not in text
+    for token in (
+        "employee",
+        "salary",
+        "attendance",
+        "emp_id",
+        "dept_id",
+        "base_salary",
+        "check_in",
+        "check_out",
+    ):
+        assert token in text, token
+    _assert_query("11_01", ["date", "year"], ["前 4 个字符"])
+    _assert_query("11_02", ["date", "quarter"], ["DIV 3"])
+    _assert_unsolvable(
+        "11_03",
+        "汇总所有日期格式转换的代码：year, mm, quarter, half, h2t1, ytm, last*系列。",
+    )
