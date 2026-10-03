@@ -933,9 +933,23 @@ GROUP BY room_id, SUBSTR(event_time, 1, 13);
                 difficulty=4,
                 tags=["同时在线", "峰值时间"],
                 description="""
-统计 2022-05-01 当天每个直播间最大在线观看人数，以及达到该峰值的时间。
+## 数据
 
-English: For a specific date, find the maximum concurrent viewer count per live room and the exact time when that peak occurred. Use cumulative sum + rank.
+表 `live_log`：`room_id`（直播间），`user_id`（用户），`login_time`（进入时间），`logout_time`（离开时间）。
+
+## 口径
+
+登录事件只保留 `login_time` 落在 `2022-05-01` 的行（+1），离开事件只保留 `logout_time` 落在该日的行（-1）。按房间按时间累加得到在线人数。每个房间保留在线人数最高的那些事件时间；并列最高的时间都保留。
+
+## 输出
+
+3 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| room_id | 直播间 |
+| peak_time | 达到最高在线人数的事件时间 |
+| max_online | 该房间的最高在线人数 |
 """,
                 reference_sql="""
 WITH events AS (
@@ -970,9 +984,22 @@ WHERE rk = 1;
                 difficulty=5,
                 tags=["累计", "hard", "美团"],
                 description="""
-给定每个用户每天的消费金额，求每个用户累计消费首次达到 1000 元的日期。
+## 数据
 
-English: Given daily spending per user, find the earliest date when each user's cumulative spending first reaches 1000. Use cumulative sum, filter, then MIN.
+表 `user_spend`：`user_id`（用户），`dt`（日期），`price`（当日消费金额）。
+
+## 口径
+
+按用户分组，组内按 `dt` 对 `price` 累计。取累计金额第一次大于等于 1000 的日期。从未达到 1000 的用户不出现。
+
+## 输出
+
+2 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| user_id | 用户 |
+| reach_date | 累计消费首次达到 1000 的日期 |
 """,
                 reference_sql="""
 WITH cumulative AS (
@@ -997,9 +1024,22 @@ GROUP BY user_id;
                 difficulty=4,
                 tags=["复购", "累计"],
                 description="""
-计算每个用户复购（购买了 ≥ 2 次）的商品列表。
+## 数据
 
-English: Find products that each user has purchased 2 or more times (repurchase analysis). Use GROUP BY + HAVING COUNT >= 2.
+表 `orders`：`user_id`（用户），`product_id`（商品），`order_id`（订单）。
+
+## 口径
+
+按用户和商品分组，统计不同 `order_id` 的个数。只保留至少 2 个不同订单的组。每一组一行。
+
+## 输出
+
+2 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| user_id | 用户 |
+| product_id | 商品 |
 """,
                 reference_sql="""
 SELECT user_id, product_id
@@ -1017,9 +1057,23 @@ HAVING COUNT(DISTINCT order_id) >= 2;
                 difficulty=3,
                 tags=["新低", "累计", "min"],
                 description="""
-找出当天价格是历史新低的商品 ID。
+## 数据
 
-English: Find products whose price today is an all-time low. Use `min() over()` for a rolling minimum, then compare current price with historical minimum.
+表 `product_price`：`id`（商品），`ds`（日期），`price`（价格）。
+
+## 口径
+
+按商品、按日期排序。输出价格等于截至当天最低价、且严格低于前一条价格的那些日期。每个创新低的日期都输出，不限于最后一天。没有前一条价格的首日不输出。
+
+## 输出
+
+3 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| id | 商品 |
+| ds | 日期 |
+| price | 当天价格 |
 """,
                 reference_sql="""
 WITH min_so_far AS (

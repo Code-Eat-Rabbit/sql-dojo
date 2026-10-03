@@ -101,3 +101,14 @@ def test_category_04_early_statements():
         ["room_id", "hour_slot", "max_online"],
         ["不限制日期"],
     )
+
+
+def test_category_04_late_statements():
+    _assert_query(
+        "04_05",
+        ["room_id", "peak_time", "max_online"],
+        ["2022-05-01", "并列最高"],
+    )
+    _assert_query("04_06", ["user_id", "reach_date"], ["大于等于 1000"])
+    _assert_query("04_07", ["user_id", "product_id"], ["order_id"])
+    _assert_query("04_08", ["id", "ds", "price"], ["严格低于"])
