@@ -481,10 +481,24 @@ GROUP BY user_id, streak_id;
                 difficulty=3,
                 tags=["lead", "lag", "波峰波谷"],
                 description="""
-给定股票/商品价格时间序列表，标记每个时间点是「波峰」还是「波谷」。
-波峰：价格大于前一天和后一天；波谷反之。
+## 数据
 
-English: Given a stock/commodity price time series, mark each time point as "peak" (price > previous and next) or "trough" (price < previous and next). Use LAG and LEAD window functions.
+表 `stock_price`：`id`（标的），`ds`（日期），`price`（价格）。
+
+## 口径
+
+按 `id` 分组、按 `ds` 排序。某一天的价格同时大于前一天和后一天，记为「波峰」；同时小于前一天和后一天，记为「波谷」。其余情况（含缺少前一天或后一天）记为「持平」。每一行价格记录都输出。
+
+## 输出
+
+4 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| id | 标的 |
+| ds | 日期 |
+| price | 价格 |
+| type | 波峰、波谷或持平 |
 """,
                 reference_sql="""
 SELECT id, ds, price,
@@ -511,9 +525,25 @@ FROM (
                 difficulty=2,
                 tags=["lag", "列转换"],
                 description="""
-把前一行和后一行的数据放到当前行，作为新列展示。
+## 数据
 
-English: Move the previous row's value and the next row's value into the current row as new columns using LAG and LEAD.
+表 `metric_readings`：`id`（分组），`date`（日期），`value`（数值）。
+
+## 口径
+
+按 `id` 分组、按 `date` 排序。每一行带上同一组里前一行和后一行的 `value`。该组第一行的前值为空，最后一行的后值为空。
+
+## 输出
+
+5 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| id | 分组 |
+| date | 日期 |
+| value | 当前值 |
+| prev_value | 前一行的值 |
+| next_value | 后一行的值 |
 """,
                 reference_sql="""
 SELECT id, date, value,
@@ -534,9 +564,24 @@ FROM metric_readings;
                 difficulty=3,
                 tags=["lag", "面试"],
                 description="""
-真实面试题（lag/lead 综合应用）。
+## 数据
 
-English: A real interview question covering comprehensive LAG/LEAD usage, e.g., calculating period-over-period change rates.
+表 `metrics`：`date`（日期），`value`（数值）。
+
+## 口径
+
+全表按 `date` 排序。每一行给出前一行的 `value`，以及相对前一行的百分比变化：`(当前值 - 前值) * 100 / 前值`，保留 2 位小数。第一行的前值和变化率为空。
+
+## 输出
+
+4 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| date | 日期 |
+| value | 当前值 |
+| prev_value | 前一行的值 |
+| change_pct | 相对前一行的百分比变化，保留 2 位小数 |
 """,
                 reference_sql="""
 -- 面试题典型场景：计算变化率

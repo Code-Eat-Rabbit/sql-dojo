@@ -51,3 +51,21 @@ def test_category_01_statements():
         ["user_id", "streak_id", "streak_len"],
         ["result = 'win'", "每一段连续胜利"],
     )
+
+
+def test_category_02_statements():
+    _assert_query(
+        "02_01",
+        ["id", "ds", "price", "type"],
+        ["持平"],
+    )
+    _assert_query(
+        "02_02",
+        ["id", "date", "value", "prev_value", "next_value"],
+        ["前一行", "后一行"],
+    )
+    _assert_query(
+        "02_03",
+        ["date", "value", "prev_value", "change_pct"],
+        ["2 位小数"],
+    )
