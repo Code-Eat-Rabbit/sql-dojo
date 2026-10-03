@@ -740,9 +740,24 @@ WHERE dr = 2;
                 difficulty=2,
                 tags=["sum", "累计", "聚合开窗"],
                 description="""
-用聚合开窗函数 `sum() over()` 统计每个用户按月累计访问次数。
+## 数据
 
-English: Use `sum() over()` to calculate each user's cumulative visit count by month.
+表 `user_visits`：`user_id`（用户），`month_id`（月份，形如 `2024-01`），`visit_cnt_1m`（该月访问次数）。
+
+## 口径
+
+按用户分组，组内按 `month_id` 排序，对 `visit_cnt_1m` 做从早到晚的累计。每个用户的每个月一行。
+
+## 输出
+
+4 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| user_id | 用户 |
+| month_id | 月份 |
+| visit_cnt_1m | 该月访问次数 |
+| cumulative_visits | 截至该月的累计访问次数 |
 """,
                 reference_sql="""
 SELECT user_id, month_id, visit_cnt_1m,
@@ -762,10 +777,22 @@ FROM user_visits;
                 difficulty=3,
                 tags=["同时在线", "进出时间", "累加"],
                 description="""
-给定用户进入和离开直播间的时间，计算同时在线人数峰值。
-核心技巧：进入 +1，离开 -1，按时间排序累加。
+## 数据
 
-English: Peak concurrent online users: given user enter/leave timestamps, treat enter as +1 and leave as -1, then compute cumulative sum by time to find the maximum.
+表 `live_log`：`room_id`（直播间），`user_id`（用户），`login_time`（进入时间），`logout_time`（离开时间）。
+
+## 口径
+
+登录事件只保留 `login_time` 落在 `2021-03-10` 的行，记为 +1。离开事件只保留 `logout_time` 落在 `2021-03-10` 的行，记为 -1。按房间、按事件时间累加，得到每个事件之后的在线人数。每个房间取这个在线人数的最大值。
+
+## 输出
+
+2 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| room_id | 直播间 |
+| max_online | 该日在线人数的最大值 |
 """,
                 reference_sql="""
 -- 步骤一：进入+1，离开-1
@@ -814,9 +841,23 @@ GROUP BY room_id;
                 difficulty=3,
                 tags=["同时在线", "小时"],
                 description="""
-限定时段内，按每小时统计同时在线人数的最大值。
+## 数据
 
-English: Within a specified time range, calculate the maximum concurrent online users per hour.
+表 `live_log`：`room_id`（直播间），`user_id`（用户），`login_time`（进入时间），`logout_time`（离开时间）。
+
+## 口径
+
+登录只保留 `login_time` 在 `2021-03-10` 的行（+1），离开只保留 `logout_time` 在该日的行（-1），按房间按时间累加。再按事件时间的前 13 个字符（到小时）分组，取该小时内出现过的最大在线人数。累加跨小时连续计算，不在每个小时重新从 0 开始。
+
+## 输出
+
+3 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| room_id | 直播间 |
+| hour_slot | 小时，取事件时间的前 13 个字符 |
+| max_online | 该小时内出现过的最大在线人数 |
 """,
                 reference_sql="""
 -- 在步骤二的 event_time 上加 SUBSTR 取小时粒度即可
@@ -847,9 +888,23 @@ GROUP BY room_id, SUBSTR(event_time, 1, 13);
                 difficulty=2,
                 tags=["同时在线", "全时段"],
                 description="""
-不限制日期，统计有史以来每小时最大同时在线人数。
+## 数据
 
-English: Remove the date filter to calculate all-time hourly maximum concurrent users.
+表 `live_log`：`room_id`（直播间），`user_id`（用户），`login_time`（进入时间），`logout_time`（离开时间）。
+
+## 口径
+
+不限制日期。进入记 +1，离开记 -1，按房间按时间对全部历史累加。再按事件时间的前 13 个字符（到小时）分组，取该小时内出现过的最大在线人数。累加跨小时、跨日期连续计算。
+
+## 输出
+
+3 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| room_id | 直播间 |
+| hour_slot | 小时，取事件时间的前 13 个字符 |
+| max_online | 该小时内出现过的最大在线人数 |
 """,
                 reference_sql="""
 -- 去掉 WHERE 日期筛选即可

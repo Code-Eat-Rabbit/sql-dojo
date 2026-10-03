@@ -82,3 +82,22 @@ def test_category_03_statements():
         ["student", "subject"],
         ["名次等于 2"],
     )
+
+
+def test_category_04_early_statements():
+    _assert_query(
+        "04_01",
+        ["user_id", "month_id", "visit_cnt_1m", "cumulative_visits"],
+        ["visit_cnt_1m"],
+    )
+    _assert_query("04_02", ["room_id", "max_online"], ["2021-03-10"])
+    _assert_query(
+        "04_03",
+        ["room_id", "hour_slot", "max_online"],
+        ["前 13 个字符"],
+    )
+    _assert_query(
+        "04_04",
+        ["room_id", "hour_slot", "max_online"],
+        ["不限制日期"],
+    )
