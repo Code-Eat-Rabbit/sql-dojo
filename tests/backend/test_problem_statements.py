@@ -123,3 +123,23 @@ def test_category_05_06_statements():
     )
     _assert_query("06_02", ["u1", "u2"], ["(B,A)"])
     _assert_unsolvable("06_03", "当数据量达到千亿级别时，相互关注查询如何优化？")
+
+
+def test_category_07_08_09_statements():
+    _assert_query(
+        "07_01",
+        ["first_date", "day0_users", "day7_users", "retention_pct"],
+        ["第 7 天"],
+    )
+    _assert_query("08_01", ["user_id", "tag"], ["按逗号拆开"])
+    _assert_query("08_02", ["user_id", "tags"], ["先后不限"])
+    _assert_query(
+        "09_01",
+        ["id", "status", "start_time", "end_time"],
+        ["下一条"],
+    )
+    _assert_query(
+        "09_02",
+        ["id", "date", "value", "filled_value"],
+        ["filled_value"],
+    )

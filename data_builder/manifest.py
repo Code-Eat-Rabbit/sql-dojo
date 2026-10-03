@@ -1352,9 +1352,24 @@ HAVING COUNT(*) >= 2;
                 difficulty=3,
                 tags=["留存", "retention", "left join"],
                 description="""
-给定用户每日活跃表，计算七日留存率（Day0 活跃的用户在 Day7 仍然活跃的比例）。
+## 数据
 
-English: Given daily user activity, calculate the 7-day retention rate: the proportion of Day 0 users who are still active on Day 7. Use MIN date + LEFT JOIN to Day 7 records.
+表 `user_active`：`user_id`（用户），`date`（活跃日期）。
+
+## 口径
+
+每个用户的最早活跃日为 cohort 日期。按这个日期分组。`day0_users` 是该日首次活跃的用户数。`day7_users` 是这些用户里，在最早活跃日之后第 7 天仍然活跃的人数。`retention_pct` 为 `day7_users / day0_users * 100`，保留 2 位小数。
+
+## 输出
+
+4 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| first_date | 用户最早活跃日 |
+| day0_users | 该日首次活跃的用户数 |
+| day7_users | 第 7 天仍活跃的用户数 |
+| retention_pct | 七日留存百分比，保留 2 位小数 |
 """,
                 reference_sql="""
 SELECT a.first_date,
@@ -1432,9 +1447,22 @@ GROUP BY first_date;
                 difficulty=2,
                 tags=["展开", "行转列"],
                 description="""
-给定一个用户和其标签列表（逗号分隔），把标签展开为多行。
+## 数据
 
-English: Given users with comma-separated tags, expand each tag into its own row (string-to-rows). Use recursive CTE in MySQL 8 to simulate explode.
+表 `user_tags`：`user_id`（用户），`tags`（逗号分隔的标签字符串）。
+
+## 口径
+
+按逗号拆开 `tags`。每个非空标签一行。空标签不输出。
+
+## 输出
+
+2 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| user_id | 用户 |
+| tag | 单个标签 |
 """,
                 reference_sql="""
 -- MySQL 8 用递归 CTE 模拟 explode（对应 Hive 的 lateral view explode）
@@ -1464,9 +1492,22 @@ SELECT user_id, tag FROM split WHERE tag != '';
                 difficulty=2,
                 tags=["收缩", "列转行", "group_concat"],
                 description="""
-把多行数据按用户合并为一行（聚合标签）。
+## 数据
 
-English: Aggregate multiple rows per user back into a single row with concatenated tags (rows-to-string). Use GROUP_CONCAT in MySQL 8.
+表 `user_tag_rows`：`user_id`（用户），`tag`（单个标签）。
+
+## 口径
+
+按用户把 `tag` 用逗号拼成一个字符串。每个用户一行。标签之间的先后不限。
+
+## 输出
+
+2 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| user_id | 用户 |
+| tags | 逗号拼接后的标签 |
 """,
                 reference_sql="""
 SELECT user_id,
@@ -1528,9 +1569,24 @@ GROUP BY user_id;
                 difficulty=2,
                 tags=["状态", "标记"],
                 description="""
-给定状态变更日志，标记每个时间段的状态。
+## 数据
 
-English: Given a status change log, mark each time period with its corresponding status. Use LEAD to get the next timestamp as the current status end time.
+表 `status_log`：`id`（对象），`status`（状态），`start_time`（该状态开始时间）。
+
+## 口径
+
+按 `id` 分组、按 `start_time` 排序。每一行的结束时间取同一对象下一条记录的开始时间。最后一条没有下一条，结束时间为空。
+
+## 输出
+
+4 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| id | 对象 |
+| status | 状态 |
+| start_time | 开始时间 |
+| end_time | 下一条记录的开始时间，没有则为空 |
 """,
                 reference_sql="""
 SELECT id, status, start_time,
@@ -1547,9 +1603,24 @@ FROM status_log;
                 difficulty=3,
                 tags=["缺失值", "lag", "填充"],
                 description="""
-用上一个非空值填充缺失值（forward fill）。
+## 数据
 
-English: Forward-fill missing (NULL) values with the most recent non-null value. Use a correlated subquery or recursive CTE.
+表 `sparse_readings`：`id`（分组），`date`（日期），`value`（数值，可能为空）。
+
+## 口径
+
+`value` 非空则原样作为 `filled_value`。`value` 为空时，取同一 `id`、更早日期上最近的非空 `value`。找不到则为空。每一行都输出。
+
+## 输出
+
+4 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| id | 分组 |
+| date | 日期 |
+| value | 原始值，可能为空 |
+| filled_value | 向前填充后的值 |
 """,
                 reference_sql="""
 -- 用子查询 + lag 技术填充
