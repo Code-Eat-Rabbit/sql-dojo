@@ -69,3 +69,16 @@ def test_category_02_statements():
         ["date", "value", "prev_value", "change_pct"],
         ["2 位小数"],
     )
+
+
+def test_category_03_statements():
+    _assert_query(
+        "03_01",
+        ["student", "score", "rn", "rk", "dr"],
+        ["row_number", "dense_rank"],
+    )
+    _assert_query(
+        "03_02",
+        ["student", "subject"],
+        ["名次等于 2"],
+    )

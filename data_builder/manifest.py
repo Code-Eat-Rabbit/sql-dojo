@@ -631,15 +631,25 @@ FROM metrics;
                 difficulty=2,
                 tags=["row_number", "rank", "dense_rank", "topN"],
                 description="""
-掌握三种排序开窗函数的区别：
-- `row_number()`: 连续编号 1,2,3,4...（不并列）
-- `rank()`: 跳号 1,2,2,4...（并列同号，下一个跳号）
-- `dense_rank()`: 不跳号 1,2,2,3...（并列同号，下一个不跳）
+## 数据
 
-English: Master the three ranking window functions:
-- `row_number()`: sequential 1,2,3,4... (no ties)
-- `rank()`: gapped 1,2,2,4... (ties share rank, next skips)
-- `dense_rank()`: gapless 1,2,2,3... (ties share rank, next does not skip)
+表 `scores`：`student`（学生），`score`（分数）。
+
+## 口径
+
+全表按 `score` 从高到低排序，为每一行同时计算三种名次：`row_number`（严格递增）、`rank`（并列后跳号）、`dense_rank`（并列后不跳号）。
+
+## 输出
+
+5 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| student | 学生 |
+| score | 分数 |
+| rn | row_number 名次 |
+| rk | rank 名次 |
+| dr | dense_rank 名次 |
 """,
                 reference_sql="""
 SELECT student, score,
@@ -662,9 +672,22 @@ FROM scores;
                 difficulty=3,
                 tags=["dense_rank", "topN", "面试"],
                 description="""
-给定学生成绩表（student, subject, score），查询每个学生成绩第二高的科目。
+## 数据
 
-English: Given a student scores table (student, subject, score), find each student's second-highest scoring subject. Use DENSE_RANK with PARTITION BY.
+表 `student_scores`：`student`（学生），`subject`（科目），`score`（分数）。
+
+## 口径
+
+按学生分组，组内按分数从高到低做 `dense_rank`。只保留名次等于 2 的行。并列第二的科目都保留。不输出分数。没有第二名次的学生不出现。
+
+## 输出
+
+2 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| student | 学生 |
+| subject | 科目 |
 """,
                 reference_sql="""
 SELECT student, subject
