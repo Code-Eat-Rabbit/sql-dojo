@@ -170,3 +170,32 @@ def test_category_10_11_statements():
         "11_03",
         "汇总所有日期格式转换的代码：year, mm, quarter, half, h2t1, ytm, last*系列。",
     )
+
+
+def test_category_12_13_14_statements():
+    _assert_unsolvable("12_01", "字节跳动面试原题。")
+    _assert_unsolvable("12_02", "字节跳动面试原题。")
+    _assert_unsolvable("12_03", "得物真实业务场景 SQL 需求。")
+    _assert_unsolvable("12_04", "阿里巴巴面试原题。")
+    _assert_unsolvable("12_05", "拼多多面试原题。")
+    _assert_query("13_01", ["id", "item"], ["$.items"])
+    _assert_query("14_01", ["total_water"], ["total_water"])
+    _assert_unsolvable("14_02", "墨天轮 SQL 挑战赛题目。")
+    _assert_query(
+        "14_03",
+        ["horse", "time", "faster_horse"],
+        ["全场最快"],
+    )
+    _assert_unsolvable("14_04", "如何用 SQL 计算块熵（Block Entropy）？")
+
+
+def test_seeded_problem_text(client):
+    detail = client.get("/api/problems/01_01")
+    assert detail.status_code == 200
+    assert "## 数据" in detail.json()["description"]
+    assert detail.json()["title"] == "查询连续登陆3天以上的用户"
+
+    stub = client.get("/api/problems/12_01")
+    assert stub.status_code == 200
+    assert stub.json()["description"].startswith("本题暂不可作答")
+    assert stub.json()["title"] == "字节 — 题1"

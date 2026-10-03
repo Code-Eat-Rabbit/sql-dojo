@@ -1882,7 +1882,11 @@ FROM raw_dates;
                 title="字节 — 题1",
                 difficulty=3,
                 tags=["字节", "大厂", "stub"],
-                description="字节跳动面试原题。",
+                description="""
+本题暂不可作答。
+
+字节跳动面试原题。
+""",
                 reference_sql="-- 待补充",
                 tables=[],
                 hints=["题目内容待从原始文档补充"],
@@ -1893,7 +1897,11 @@ FROM raw_dates;
                 title="字节 — 题2",
                 difficulty=3,
                 tags=["字节", "大厂", "stub"],
-                description="字节跳动面试原题。",
+                description="""
+本题暂不可作答。
+
+字节跳动面试原题。
+""",
                 reference_sql="-- 待补充",
                 tables=[],
                 hints=["题目内容待从原始文档补充"],
@@ -1904,7 +1912,11 @@ FROM raw_dates;
                 title="得物实际场景需求",
                 difficulty=4,
                 tags=["得物", "大厂", "场景", "stub"],
-                description="得物真实业务场景 SQL 需求。",
+                description="""
+本题暂不可作答。
+
+得物真实业务场景 SQL 需求。
+""",
                 reference_sql="-- 待补充",
                 tables=[],
                 hints=["题目内容待从原始文档补充"],
@@ -1915,7 +1927,11 @@ FROM raw_dates;
                 title="阿里面试题",
                 difficulty=4,
                 tags=["阿里", "大厂", "stub"],
-                description="阿里巴巴面试原题。",
+                description="""
+本题暂不可作答。
+
+阿里巴巴面试原题。
+""",
                 reference_sql="-- 待补充",
                 tables=[],
                 hints=["题目内容待从原始文档补充"],
@@ -1926,7 +1942,11 @@ FROM raw_dates;
                 title="拼多多面试题",
                 difficulty=3,
                 tags=["拼多多", "大厂", "stub"],
-                description="拼多多面试原题。",
+                description="""
+本题暂不可作答。
+
+拼多多面试原题。
+""",
                 reference_sql="-- 待补充",
                 tables=[],
                 hints=["题目内容待从原始文档补充"],
@@ -1977,9 +1997,22 @@ FROM raw_dates;
                 difficulty=3,
                 tags=["json", "解析"],
                 description="""
-MySQL 8 中解析 JSON 字段的方法（JSON_EXTRACT 提取字段，JSON_TABLE 展开数组）。
+## 数据
 
-English: Parse JSON fields in MySQL 8: JSON_EXTRACT() to access keys, JSON_TABLE() to expand arrays (the MySQL counterpart of Hive's explode).
+表 `user_profiles`：`id`（用户），`data`（JSON 文本，其中 `$.items` 是字符串数组）。
+
+## 口径
+
+把 `data` 里 `$.items` 数组的每个元素展开成一行。没有元素的文档不产生行。
+
+## 输出
+
+2 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| id | 用户 |
+| item | 数组中的一个元素 |
 """,
                 reference_sql="""
 -- MySQL 8 内置 JSON 函数
@@ -2059,9 +2092,21 @@ FROM user_profiles jt,
                 difficulty=5,
                 tags=["趣味", "算法", "接雨水"],
                 description="""
-如何用 SQL 求解经典算法题「接雨水」？（给定柱子高度数组，计算能接多少雨水）
+## 数据
 
-English: Solve the classic "Trapping Rain Water" algorithm problem in SQL. For each position, water = min(left_max, right_max) - height. Use MAX() over() for rolling maxima.
+表 `heights`：`idx`（柱子从左到右的位置），`height`（柱子高度）。
+
+## 口径
+
+按 `idx` 从左到右。每个位置的储水量为：该位置左侧（含自身）最大高度与右侧（含自身）最大高度的较小值，再减去当前高度。只累加储水量为正的位置。`total_water` 是全表一行的总和。
+
+## 输出
+
+1 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| total_water | 能接到的雨水总量 |
 """,
                 reference_sql="""
 WITH left_max AS (
@@ -2090,7 +2135,11 @@ WHERE LEAST(lmax, rmax) > height;
                 title="墨天轮 SQL 挑战赛第二期",
                 difficulty=4,
                 tags=["挑战赛", "趣味", "stub"],
-                description="墨天轮 SQL 挑战赛题目。",
+                description="""
+本题暂不可作答。
+
+墨天轮 SQL 挑战赛题目。
+""",
                 reference_sql="-- 待补充",
                 tables=[],
                 hints=["题目内容待从原始文档补充"],
@@ -2102,9 +2151,23 @@ WHERE LEAST(lmax, rmax) > height;
                 difficulty=4,
                 tags=["趣味", "赛马", "非等值关联"],
                 description="""
-如何用 SQL 解决趣味赛马问题（非等值关联匹配）？
+## 数据
 
-English: Solve the horse racing problem using non-equi joins: for each horse, find the next faster horse using a correlated subquery.
+表 `race_result`：`horse`（马名），`time`（完赛耗时，数值越小越快）。
+
+## 口径
+
+对每匹马，找出耗时严格更短的马里耗时最短的那一匹，作为更快的相邻马。全场最快的马没有更快者，不出现在结果里。
+
+## 输出
+
+3 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| horse | 马名 |
+| time | 该马的耗时 |
+| faster_horse | 比它更快的马中耗时最短者 |
 """,
                 reference_sql="""
 -- 非等值关联：找每匹马比自己快的前一匹
@@ -2123,7 +2186,11 @@ WHERE b.time = (SELECT MIN(time) FROM race_result WHERE time < a.time);
                 title="块熵计算",
                 difficulty=5,
                 tags=["熵", "趣味", "信息论", "stub"],
-                description="如何用 SQL 计算块熵（Block Entropy）？",
+                description="""
+本题暂不可作答。
+
+如何用 SQL 计算块熵（Block Entropy）？
+""",
                 reference_sql="-- 待补充",
                 tables=[],
                 hints=["题目内容待从原始文档补充"],
