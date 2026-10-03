@@ -1,0 +1,53 @@
+"""题面结构：三段模板、输出列、不可作答标注。"""
+
+from data_builder.manifest import get_problem
+
+
+def _output_columns(description: str) -> list[str]:
+    output = description.split("## 输出", 1)[1]
+    cols = []
+    for line in output.splitlines():
+        line = line.strip()
+        if not line.startswith("|"):
+            continue
+        cells = [c.strip().strip("`") for c in line.strip("|").split("|")]
+        if not cells or cells[0] in {"列名", ""}:
+            continue
+        if set(cells[0]) <= set("-: "):
+            continue
+        cols.append(cells[0])
+    return cols
+
+
+def _assert_query(pid: str, columns: list[str], phrases: list[str]) -> None:
+    text = get_problem(pid).description.strip()
+    assert "English:" not in text, pid
+    data_at = text.find("## 数据")
+    rule_at = text.find("## 口径")
+    out_at = text.find("## 输出")
+    assert 0 <= data_at < rule_at < out_at, pid
+    assert _output_columns(text) == columns, pid
+    for phrase in phrases:
+        assert phrase in text, f"{pid} 缺少 {phrase}"
+
+
+def _assert_unsolvable(pid: str, sentence: str) -> None:
+    text = get_problem(pid).description.strip()
+    assert text.startswith("本题暂不可作答"), pid
+    assert sentence in text, pid
+    assert "## 输出" not in text, pid
+    assert "English:" not in text, pid
+
+
+def test_category_01_statements():
+    _assert_query("01_01", ["user_id", "date1", "day_cnt"], ["大于 3", "至少 4 天"])
+    _assert_query("01_02", ["user_id", "max_day_cnt"], ["最长连续天数", "没有「至少 N 天」"])
+    _assert_query("01_03", ["user_id"], ["连续 3 天", "连续 4 天及以上"])
+    _assert_unsolvable("01_04", "总结连续类 SQL 题的核心思路。")
+    _assert_query("01_05", ["user_id", "grp", "consecutive_days"], ["balance > 1000", "大于 1"])
+    _assert_query("01_06", ["user_id", "NAME", "start_date", "end_date"], ["次日"])
+    _assert_query(
+        "01_07",
+        ["user_id", "streak_id", "streak_len"],
+        ["result = 'win'", "每一段连续胜利"],
+    )

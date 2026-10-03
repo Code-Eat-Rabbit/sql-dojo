@@ -78,12 +78,23 @@ CATEGORIES: List[Category] = [
                 difficulty=2,
                 tags=["字节面试题", "row_number", "连续"],
                 description="""
-给定一张用户登录表 `login_log`，包含字段 `user_id`（用户ID）和 `login_date`（登录日期）。
-请查询连续登录 3 天以上的所有用户。
+## 数据
 
-**补充知识点：** 字段名相同不会覆盖，例如 `select a,a,a` 结果有三列。
+表 `login_log`：`user_id`（用户），`login_date`（登录时间，字符串，可能带时分秒）。
 
-English: Given a user login table `login_log` with fields `user_id` (user ID) and `login_date` (login date), find all users who logged in for 3 or more consecutive days.
+## 口径
+
+同一用户、同一天多次登录先按天去重（取 `login_date` 前 10 个字符）。再按用户把连续日期分成一段，只保留连续天数大于 3 的段（至少 4 天）。每一段一行。
+
+## 输出
+
+3 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| user_id | 用户 |
+| date1 | 连续段的分组键，同一段内相同 |
+| day_cnt | 该段的连续天数 |
 """,
                 reference_sql="""
 -- 步骤一：去重
@@ -138,9 +149,22 @@ HAVING COUNT(*) > 3;
                 difficulty=2,
                 tags=["字节面试题", "row_number", "连续", "max"],
                 description="""
-承接上一题，查询每个用户连续登录的最大天数。
+## 数据
 
-English: Following the previous problem, find the maximum consecutive login days for each user.
+表 `login_log`：`user_id`（用户），`login_date`（登录时间，字符串，可能带时分秒）。
+
+## 口径
+
+同一用户、同一天多次登录先按天去重。按用户把连续日期分成一段，再对每个用户取这些段里的最长连续天数。每个有登录记录的用户一行，没有「至少 N 天」的筛选。
+
+## 输出
+
+2 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| user_id | 用户 |
+| max_day_cnt | 该用户的最长连续登录天数 |
 """,
                 reference_sql="""
 -- 承接 01_01 的思路：去重 → row_number 差值分组 → 按用户取最大连续天数
@@ -180,15 +204,21 @@ GROUP BY user_id;
                 difficulty=3,
                 tags=["row_number", "连续", "方法汇总"],
                 description="""
-用三种不同方法实现「查询连续登录 3 天以上的用户」：
-1. row_number() 法
-2. lag/lead 法  
-3. 自关联法
+## 数据
 
-English: Solve "users who logged in 3+ consecutive days" using three different methods:
-1. row_number() method
-2. lag/lead method
-3. Self-join method
+表 `login_log`：`user_id`（用户），`login_date`（登录时间，字符串，可能带时分秒）。
+
+## 口径
+
+同一用户、同一天多次登录先按天去重。找出存在连续 3 天登录的用户：某一天、它的前 1 天、前 2 天都有登录。连续 4 天及以上的用户也包含在内。每个用户只出现一次。
+
+## 输出
+
+1 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| user_id | 用户 |
 """,
                 reference_sql="""
 -- 方法1: row_number()
@@ -225,9 +255,9 @@ JOIN (SELECT user_id, substr(login_date,1,10) AS login_date FROM login_log GROUP
                 difficulty=1,
                 tags=["连续", "总结"],
                 description="""
-总结连续类 SQL 题的核心思路。
+本题暂不可作答。
 
-English: Summary: The core approach for consecutive-type SQL problems. Use `row_number() over()` to create a grouping key, then group and count.
+总结连续类 SQL 题的核心思路。
 """,
                 reference_sql="""
 -- 核心思路：row_number() over() 减一下，再分组 count
@@ -247,9 +277,23 @@ English: Summary: The core approach for consecutive-type SQL problems. Use `row_
                 difficulty=3,
                 tags=["连续", "外汇", "条件筛选"],
                 description="""
-某外汇公司面试题：给定用户账户表，查询账户余额大于 1000 的连续天数。
+## 数据
 
-English: Given a forex company's account table, find consecutive days where the account balance exceeds 1000. Filter first, then apply the consecutive-days pattern.
+表 `account`：`user_id`（用户），`date`（日期），`balance`（账户余额）。
+
+## 口径
+
+先保留 `balance > 1000` 的行。再按用户把连续日期分成一段，只输出长度大于 1 的段。每一段一行。
+
+## 输出
+
+3 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| user_id | 用户 |
+| grp | 连续段的分组键，同一段内相同 |
+| consecutive_days | 该段的连续天数 |
 """,
                 reference_sql="""
 -- 先筛选余额 > 1000 的行，再套用连续类题的思路
@@ -286,9 +330,24 @@ HAVING COUNT(*) > 1;
                 difficulty=4,
                 tags=["连续", "集度", "日期区间合并"],
                 description="""
-给定一组日期区间（start_date, end_date），合并连续或重叠的区间。
+## 数据
 
-English: Given a set of date intervals (start_date, end_date), merge consecutive or overlapping intervals. Use lag to detect gaps, then sum flags to create group IDs.
+表 `user_schedule`：`user_id`（用户），`name`（姓名），`start_date`（区间开始日），`end_date`（区间结束日）。
+
+## 口径
+
+按 `user_id` 与 `name` 分组，组内按 `start_date` 排序。仅当下一段的 `start_date` 恰好等于上一段 `end_date` 的次日时，两段并入同一组。重叠但不满足这个次日条件的区间各自成段。每一组输出最早的开始日和最晚的结束日。
+
+## 输出
+
+4 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| user_id | 用户 |
+| NAME | 姓名 |
+| start_date | 该段最早的开始日 |
+| end_date | 该段最晚的结束日 |
 """,
                 reference_sql="""
 WITH t1 AS (
@@ -326,9 +385,23 @@ ORDER BY MIN(start_date), user_id, NAME;
                 difficulty=3,
                 tags=["连续", "胜负"],
                 description="""
-计算每个用户的连胜数（最长连续胜场）。
+## 数据
 
-English: Calculate each user's longest winning streak. Isolate "win" rows, then use the row_number difference trick to group consecutive wins.
+表 `games`：`user_id`（用户），`date`（日期），`result`（结果，胜利为 `win`）。
+
+## 口径
+
+只看 `result = 'win'` 的记录。按用户、按日期把连续的胜利分成段。每一段连续胜利一行，包含长度为 1 的段。没有胜利的用户不出现。
+
+## 输出
+
+3 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| user_id | 用户 |
+| streak_id | 连胜段的分组键 |
+| streak_len | 该段的胜利场数 |
 """,
                 reference_sql="""
 -- 解法1：先把胜负转 0/1，再套连续类题思路
