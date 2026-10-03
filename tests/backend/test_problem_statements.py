@@ -112,3 +112,14 @@ def test_category_04_late_statements():
     _assert_query("04_06", ["user_id", "reach_date"], ["大于等于 1000"])
     _assert_query("04_07", ["user_id", "product_id"], ["order_id"])
     _assert_query("04_08", ["id", "ds", "price"], ["严格低于"])
+
+
+def test_category_05_06_statements():
+    _assert_query("05_01", ["merged_start", "merged_end"], ["重叠"])
+    _assert_query(
+        "06_01",
+        ["student_name", "class_name", "score"],
+        ["score <= 60"],
+    )
+    _assert_query("06_02", ["u1", "u2"], ["(B,A)"])
+    _assert_unsolvable("06_03", "当数据量达到千亿级别时，相互关注查询如何优化？")

@@ -1127,9 +1127,22 @@ WHERE price = min_price_so_far
                 difficulty=4,
                 tags=["explode", "区间", "合并"],
                 description="""
-给定多个区间（start, end），合并所有有交集的区间。
+## 数据
 
-English: Given multiple intervals (start, end), merge all overlapping intervals. Use MAX(end) over() as a rolling maximum and detect non-overlapping groups.
+表 `raw_intervals`：`start`（区间起点），`end`（区间终点）。
+
+## 口径
+
+按 `start` 从小到大排序后合并区间。当前起点大于此前已出现的最大终点时新开一段；起点与此前最大终点相接或重叠时并入同一段。每一段输出最小起点和最大终点。
+
+## 输出
+
+2 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| merged_start | 合并后的起点 |
+| merged_end | 合并后的终点 |
 """,
                 reference_sql="""
 WITH intervals AS (
@@ -1201,9 +1214,25 @@ FROM user_tags t,
                 difficulty=3,
                 tags=["子查询", "join", "关联"],
                 description="""
-查询「所有科目都大于 60 分」的学生的全部成绩记录。
+## 数据
 
-English: Find all score records for students who scored above 60 in every subject. Use NOT IN to exclude students with any failing score, then JOIN to get full records.
+表 `student`：`id`（学生 ID），`student_name`（姓名）。
+表 `class`：`id`（课程 ID），`class_name`（课程名）。
+表 `sc`：`sid`（学生 ID），`cid`（课程 ID），`score`（分数）。
+
+## 口径
+
+去掉在 `sc` 中存在 `score <= 60` 的学生。输出其余学生的全部成绩行，带上学生姓名和课程名。
+
+## 输出
+
+3 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| student_name | 学生姓名 |
+| class_name | 课程名 |
+| score | 分数 |
 """,
                 reference_sql="""
 SELECT t0.student_name, t2.class_name, t1.score
@@ -1227,9 +1256,22 @@ WHERE t0.id NOT IN (
                 difficulty=3,
                 tags=["自关联", "join", "相互关注"],
                 description="""
-在关注关系表 `fans(from_user, to_user)` 中，找出相互关注的用户对。
+## 数据
 
-English: In a follow-relationship table (from_user, to_user), find mutual follow pairs. Two approaches: self-join or UNION + GROUP BY HAVING COUNT >= 2.
+表 `fans`：`from_user`（关注方），`to_user`（被关注方）。
+
+## 口径
+
+把每一行关注和它的对调方向叠在一起：`(from_user, to_user)` 与 `(to_user, from_user)`。只保留在合并结果里出现至少 2 次的 `(u1, u2)`。相互关注会得到 `(A,B)` 和 `(B,A)` 两行。单向关注不出现。
+
+## 输出
+
+2 列，行顺序不限。
+
+| 列名 | 含义 |
+|---|---|
+| u1 | 用户对的一方 |
+| u2 | 用户对的另一方 |
 """,
                 reference_sql="""
 -- 方法1：JOIN
@@ -1260,9 +1302,9 @@ HAVING COUNT(*) >= 2;
                 difficulty=5,
                 tags=["优化", "千亿", "大数据"],
                 description="""
-当数据量达到千亿级别时，相互关注查询如何优化？
+本题暂不可作答。
 
-English: How to optimize mutual-follow queries at billion-row scale? Discussion of map-side joins, bucketing, and Bloom filters to avoid full shuffle joins.
+当数据量达到千亿级别时，相互关注查询如何优化？
 """,
                 reference_sql="""
 -- 思路：不再用 JOIN，而是用 map 端 join（小表放内存）
